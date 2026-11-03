@@ -1,0 +1,16 @@
+Sửa lần 1: bán thuốc và quản lý thuốc
+đầu tiên sửa lại form giao diện tra cứu thuốc tôi nghĩ giữ nguyên layout cũng được, tôi nghĩ không nên cho thêm, sửa xóa thuốc ở đấy chỉ được tra cứu thuốc (tên/thành phần/công dụng) về phần thông tin chi tiết thuốc thì chỉ cho phép xem read only đó các thuộc tính như: mã thuốc, tên thuốc, thành phần, giá nhập, giá bán, số lượng hiện có, sử dụng, chống chỉ định. Và ở dưới phần thông tin thuốc đấy có thêm 2 label, và 2 button: label 1 có chức năng hiển thị mã hóa đơn bán được sinh tự động dựa trên cơ sở dữ liệu, label 2 sẽ là số lượng thuốc đó, nút button 1 (thêm vào hóa đơn) khi click sẽ thêm vào hóa đơn với mã tương ứng dựa theo trên label, button 2(thanh toán với hóa đơn) khi click vào sẽ chuyển sang trang bán hàng và tăng mã hóa đơn ở label lên 1 đơn vị 
+
+thứ 2 chỉnh sửa form giao diện bán hàng, tôi nghĩ nên chia đôi giao diện: phần 1 gồm phần mã hóa đơn bán sẽ là read only vì tôi nghĩ là đã nhận từ tra cứu trước rồi nên để read only, mã nhân viên tôi nghĩ nên để là combo box và kiểu down style list, mã khách hàng, tên khách hàng vẫn như cũ(nhập mã khách hàng cũ tự động hiển thị tên khách hàng đấy); desgin thêm 1 bên tôi nghĩ nên hiển thị tên thuốc, số lượng, giá bán. Thêm giảm giá (nếu có) và tổng tiền ở cuối. Thêm button thanh toán, làm mới(làm mới lại đơn bán), xuất hóa đơn ra excel. Ở button thanh toán khi bấm vào có thể load sang form mới là frmThanhToan; form này hiển thị mã qr ngân hàng của cửa hàng, và button đã thanh toán, khi bấm button đã thanh toán trở về trang bán hàng với hóa đơn vừa thanh toán và active nút xuất hóa đơn excel
+
+Sửa lần 2: Quản lý nhập hàng 
+- sửa lại phần frm nhập hàng: giữ nguyên các label, các phần tìm kiếm cũ thêm label mới và textbox tương ứng là mã nhà cung cấp(MaNCC và tên hiển thị tự động theo MaNCC nếu nhà cung cấp đã tồn tại trong csdl); thêm label và textbox tương ứng là MaNV để biết MaNV nào phụ trách nhập hàng (thủ kho). Thêm khi nhập mã thuốc thủ công chỉ có phép nhập thuốc đã tồn tại trong csdl nếu chưa có ghi cảnh báo thuốc chưa từng bán. Thêm một chức năng mới có thể hiển thị là button là import phiếu nhập hàng dưới dạng file excel được không (phiếu nhập sẽ gồm tất cả những thông tin mà nhập thủ công đã có, thêm một phần hay của chức năng import là được nhập những thuốc mới chưa từng có trong csdl, code sẽ đọc các dữ liệu trên và tăng số lượng trong csdl)
+
+
+Sửa lần 3: Báo cáo và thống kê (có thể phải sửa đổi csdl) 
+tôi nghĩ có thể dữ nguyên layout nhưng cần thêm 1 số cái nữa:
+tôi muốn thêm cả phần cảnh báo thuốc sắp hết dù không có trong đề bài nhưng đó là yêu cầu nhất thiết, thuốc sắp hết sẽ được lọc ra theo số lượng dưới 30
+ở phần báo cáo thuốc còn hạn sử dụng và hết hạn sử dụng tôi nghĩ nên lọc lại tự động sắp xếp danh sách thuốc theo hạn sử dụng ngắn nhất và dòng thông tin thuốc ấy đánh đỏ khi đã quá hạn và màu vàng khi đã gần hết hạn
+ở phần báo cáo danh sách hóa đơn và tổng tiền nhập hàng theo tháng chọn trước có vẻ chưa chính xác vì chưa chọn tháng nên cần làm lại 
+phần top 5 hóa đơn bán ít theo năm chọn trước cũng cần sửa lại một chút vì chưa cho phép chọn năm
+ở phần báo cáo danh sách họ tên, tổng tiền của 2 NV bán được ít tiền nhất theo một quý chọn trước cũng đang sai vì phần tổng doanh thu có vẻ đang lỗi không cộng thêm khi bấm vẫn xuất ra dữ liệu là 0.00 dù đã bán với mã nhân viên đấy rồi
