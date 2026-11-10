@@ -9,6 +9,7 @@ namespace QuanLyNhaThuoc.BLL
     public class HoaDonNhapBLL
     {
         private HoaDonNhapDAO hdnDAO = new HoaDonNhapDAO();
+        private ThuocDAO thuocDAO = new ThuocDAO();     // [10/11/2026] kiểm tra mã vạch / công dụng khi import
 
         // ===================== CÁC HÀM CŨ - GIỮ NGUYÊN =====================
         public bool ThemHoaDonNhap(string maHDN, DateTime ngayNhap, string maNV, string maNCC, decimal tongTien)
@@ -33,8 +34,10 @@ namespace QuanLyNhaThuoc.BLL
 
         // ===================== MỚI: NHẬP THỦ CÔNG =====================
         // Lỗi nhập liệu -> ArgumentException (form hiển thị dạng cảnh báo)
+        // [10/11/2026 lần 5] thêm thông tin LÔ: số lô (tùy chọn), ngày SX (tùy chọn), hạn SD (bắt buộc)
         public bool NhapHangThuCong(string maHDN, string maNV, string maNCC, string maThuoc,
-                                    int slNhap, decimal donGia, out bool taoPhieuMoi)
+                                    int slNhap, decimal donGia, string soLo, DateTime? ngaySX, DateTime hanSD,
+                                    out bool taoPhieuMoi)
         {
             maHDN = (maHDN ?? "").Trim();
             maNV = (maNV ?? "").Trim();
@@ -49,6 +52,15 @@ namespace QuanLyNhaThuoc.BLL
                 throw new ArgumentException("Số lượng nhập phải là số nguyên lớn hơn 0.");
             if (donGia < 0)
                 throw new ArgumentException("Đơn giá không được âm.");
+            soLo = (soLo ?? "").Trim();
+            if (soLo.Length > 30)
+                throw new ArgumentException("Số lô tối đa 30 ký tự.");
+            if (hanSD.Date <= DateTime.Today)
+                throw new ArgumentException("Hạn sử dụng của lô phải sau hôm nay (không nhập lô đã / sắp hết hạn trong ngày).");
+            if (ngaySX.HasValue && ngaySX.Value.Date >= hanSD.Date)
+                throw new ArgumentException("Hạn sử dụng phải sau ngày sản xuất.");
+            if (ngaySX.HasValue && ngaySX.Value.Date > DateTime.Today)
+                throw new ArgumentException("Ngày sản xuất không được sau hôm nay.");
 
             if (hdnDAO.LayTenNhanVien(maNV) == null)
                 throw new ArgumentException("Mã nhân viên '" + maNV + "' không tồn tại trong CSDL.");
@@ -62,7 +74,11 @@ namespace QuanLyNhaThuoc.BLL
                                             "Nhập thủ công chỉ cho phép thuốc đã tồn tại.\n" +
                                             "Để nhập thuốc mới, hãy dùng chức năng \"Import Phiếu Nhập (Excel)\".");
 
-            return hdnDAO.NhapHangThuCong(maHDN, maNV, maNCC, maThuoc, slNhap, donGia, 0, out taoPhieuMoi);
+            bool kq = hdnDAO.NhapHangThuCong(maHDN, maNV, maNCC, maThuoc, slNhap, donGia, 0,
+                                             soLo, ngaySX, hanSD, out taoPhieuMoi);
+            NhatKyBLL.Ghi(NhatKyBLL.NHAP_HANG, maHDN, "Nhập " + slNhap + " " + maThuoc + " giá " + donGia.ToString("N0") +
+                          (soLo == "" ? "" : ", lô " + soLo) + ", HSD " + hanSD.ToString("dd/MM/yyyy"));
+            return kq;
         }
 
         // ===================== MỚI: EXCEL =====================
@@ -175,9 +191,33 @@ namespace QuanLyNhaThuoc.BLL
                 thuocMoi.Add(d.MaThuoc);
             }
 
+            // 3. [10/11/2026] Mã vạch: không trùng giữa các thuốc trong file và với thuốc khác trong CSDL
+            foreach (var nhom in kq.DanhSach.Where(d => !string.IsNullOrWhiteSpace(d.MaVach) && d.MaThuoc != "")
+                                            .GroupBy(d => d.MaVach.Trim(), StringComparer.OrdinalIgnoreCase))
+            {
+                List<string> dsThuoc = nhom.Select(d => d.MaThuoc).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (dsThuoc.Count > 1)
+                {
+                    kq.Loi.Add("Mã vạch " + nhom.Key + " bị dùng cho nhiều thuốc khác nhau (" + string.Join(", ", dsThuoc) +
+                               ") ở các dòng " + string.Join(", ", nhom.Select(x => x.DongExcel)) + ".");
+                    continue;
+                }
+                string maDangDung = thuocDAO.LayMaThuocTheoMaVach(nhom.Key);
+                if (maDangDung != null && !string.Equals(maDangDung, dsThuoc[0], StringComparison.OrdinalIgnoreCase))
+                    kq.Loi.Add("Dòng " + nhom.First().DongExcel + ": mã vạch " + nhom.Key + " đã được dùng cho thuốc " + maDangDung + " trong CSDL.");
+            }
+
+            // 4. [10/11/2026] Đếm công dụng mới (chưa có trong CSDL, sẽ tự thêm khi import)
+            var congDungMoi = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string cd in kq.DanhSach.SelectMany(d => d.DanhSachCongDung).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (thuocDAO.TimMaCongDung(cd) == null) congDungMoi.Add(cd);
+            }
+
             kq.SoPhieu = kq.DanhSach.Select(d => d.MaHDN.ToUpperInvariant()).Distinct().Count();
             kq.SoThuocMoi = thuocMoi.Count;
             kq.SoNCCMoi = nccMoi.Count;
+            kq.SoCongDungMoi = congDungMoi.Count;
             kq.TongTien = kq.DanhSach.Sum(d => d.ThanhTien);
             kq.XemTruoc = TaoBangXemTruoc(kq.DanhSach, tenThuocCSDL);
             return kq;
@@ -188,7 +228,10 @@ namespace QuanLyNhaThuoc.BLL
         {
             if (kq == null || kq.DanhSach.Count == 0 || kq.Loi.Count > 0)
                 throw new InvalidOperationException("Dữ liệu Excel chưa hợp lệ, không thể import.");
-            return hdnDAO.ImportPhieuNhap(kq.DanhSach);
+            ThongKeImport tk = hdnDAO.ImportPhieuNhap(kq.DanhSach);
+            NhatKyBLL.Ghi(NhatKyBLL.NHAP_HANG, null, "Import Excel: " + tk.SoPhieu + " phiếu, " + kq.DanhSach.Count +
+                          " lô, " + tk.SoThuocMoi + " thuốc mới, tổng " + kq.TongTien.ToString("N0") + " đ");
+            return tk;
         }
 
         private static DataTable TaoBangXemTruoc(List<DongPhieuNhap> ds, Dictionary<string, string> tenThuocCSDL)
@@ -204,6 +247,10 @@ namespace QuanLyNhaThuoc.BLL
             dt.Columns.Add("Đơn Giá", typeof(decimal));
             dt.Columns.Add("Khuyến Mãi", typeof(decimal));
             dt.Columns.Add("Thành Tiền", typeof(decimal));
+            dt.Columns.Add("Số Lô");        // [10/11/2026 lần 5]
+            dt.Columns.Add("Hạn SD Lô");    // [10/11/2026 lần 5]
+            dt.Columns.Add("Mã Vạch");      // [10/11/2026]
+            dt.Columns.Add("Công Dụng");    // [10/11/2026]
             dt.Columns.Add("Trạng Thái");
 
             foreach (DongPhieuNhap d in ds)
@@ -216,7 +263,10 @@ namespace QuanLyNhaThuoc.BLL
                     trangThai = tenCSDL != null ? "Đã có - cộng tồn kho" : "THUỐC MỚI - sẽ thêm vào CSDL";
                 }
                 dt.Rows.Add(d.DongExcel, d.MaHDN, d.MaNV, d.MaNCC, d.MaThuoc, tenCSDL ?? d.TenThuoc,
-                            d.SLNhap, d.DonGia, d.KhuyenMai, d.ThanhTien, trangThai);
+                            d.SLNhap, d.DonGia, d.KhuyenMai, d.ThanhTien,
+                            d.SoLo == "" ? "(tự đặt)" : d.SoLo,
+                            d.HanSD.HasValue ? d.HanSD.Value.ToString("dd/MM/yyyy") : "(mặc định)",
+                            d.MaVach, string.Join("; ", d.DanhSachCongDung), trangThai);
             }
             return dt;
         }
@@ -236,6 +286,7 @@ namespace QuanLyNhaThuoc.BLL
         public int SoPhieu { get; set; }
         public int SoThuocMoi { get; set; }
         public int SoNCCMoi { get; set; }
+        public int SoCongDungMoi { get; set; }      // [10/11/2026]
         public decimal TongTien { get; set; }
     }
 }

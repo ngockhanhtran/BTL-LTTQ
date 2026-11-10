@@ -7,141 +7,49 @@ using QuanLyNhaThuoc.BLL;
 
 namespace QuanLyNhaThuoc.GUI
 {
+    // [10/11/2026 lần 5] Giao diện thiết kế bằng Designer (frmNhapHang.Designer.cs).
+    //   Mỗi lần nhập tạo 1 LÔ thuốc: thêm Số lô, Ngày SX, Hạn SD (bắt buộc) -> bán theo FEFO.
     public partial class frmNhapHang : Form
     {
         private HoaDonNhapBLL hdnBLL = new HoaDonNhapBLL();
-        private TextBox txtMaHDN, txtMaThuoc, txtSLNhap, txtDonGia, txtTuKhoaSearch;
-        private DataGridView dgvKetQua;
-        private Button btnThemNhap, btnTimKiemHDN;
-
-        // ===== MỚI =====
-        private TextBox txtMaNV, txtMaNCC;                  // Mã thủ kho, Mã nhà cung cấp
-        private Label lblTenNV, lblTenNCC, lblTenThuoc;     // Tên tự hiển thị theo mã
-        private Button btnImportExcel, btnTaiFileMau;
 
         private static readonly Color MauXanh = Color.FromArgb(40, 167, 69);
         private static readonly Color MauDo = Color.FromArgb(220, 53, 69);
 
         public frmNhapHang()
         {
-            this.AutoScaleDimensions = new SizeF(96F, 96F);
-            this.AutoScaleMode = AutoScaleMode.Dpi;
-
-            this.Text = "Quản lý Nhập Hàng & Kho";
-            InitializeComponentCustom();
-        }
-
-        private void InitializeComponentCustom()
-        {
-            this.SuspendLayout();
-
-            this.BackColor = Color.FromArgb(244, 246, 249);
+            InitializeComponent();
             this.Dock = DockStyle.Fill;
+            dtpHanSD.Value = DateTime.Today.AddYears(2);
+            dtpNgaySX.Value = DateTime.Today;
+            dtpNgaySX.Checked = false;
 
-            Panel pnlLeft = new Panel() { Dock = DockStyle.Left, Width = 380, BackColor = Color.White, Padding = new Padding(15), AutoScroll = true };
-            Panel pnlRight = new Panel() { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(15) };
-
-            // --- TRÁI: FORM LẬP PHIẾU NHẬP ---
-            Label lbl1 = new Label() { Text = "Lập Phiếu Nhập Hàng", Font = new Font("Segoe UI", 11, FontStyle.Bold), Left = 15, Top = 15, AutoSize = true };
-            pnlLeft.Controls.Add(lbl1);
-
-            int y = 60;
-            AddInput(pnlLeft, "Mã HĐ Nhập:", ref txtMaHDN, ref y);
-            lblTenNV = AddInputCoGoiY(pnlLeft, "Mã NV (Kho):", ref txtMaNV, ref y);       // MỚI: thủ kho phụ trách
-            lblTenNCC = AddInputCoGoiY(pnlLeft, "Mã NCC:", ref txtMaNCC, ref y);          // MỚI: nhà cung cấp
-            lblTenThuoc = AddInputCoGoiY(pnlLeft, "Mã Thuốc:", ref txtMaThuoc, ref y);    // thêm dòng tên/cảnh báo
-            AddInput(pnlLeft, "Số Lượng:", ref txtSLNhap, ref y);
-            AddInput(pnlLeft, "Đơn Giá:", ref txtDonGia, ref y);
-
-            // Gõ mã -> tự hiển thị tên (hoặc cảnh báo nếu chưa có trong CSDL)
-            txtMaNV.TextChanged += (s, e) => HienThiGoiY(txtMaNV, lblTenNV, hdnBLL.LayTenNhanVien,
-                                                          "Không có nhân viên này trong CSDL");
-            txtMaNCC.TextChanged += (s, e) => HienThiGoiY(txtMaNCC, lblTenNCC, hdnBLL.LayTenNhaCungCap,
-                                                           "Nhà cung cấp chưa có trong CSDL");
-            txtMaThuoc.TextChanged += (s, e) => HienThiGoiY(txtMaThuoc, lblTenThuoc, hdnBLL.LayTenThuoc,
-                                                             "Cảnh báo: thuốc chưa từng bán (chưa có trong CSDL)");
-
-            btnThemNhap = new Button() { Text = "Xác Nhận Nhập (Tăng Tồn Kho)", Left = 15, Top = y + 25, Width = 330, Height = 42, BackColor = Color.FromArgb(40, 167, 69), ForeColor = Color.White, Font = new Font("Segoe UI", 9, FontStyle.Bold), FlatStyle = FlatStyle.Flat };
-            btnThemNhap.Click += BtnThemNhap_Click;
-            pnlLeft.Controls.Add(btnThemNhap);
-
-            // --- TRÁI (MỚI): NHẬP TỪ FILE EXCEL ---
-            int yEx = btnThemNhap.Bottom + 30;
-            Label lblExcel = new Label() { Text = "Nhập Hàng Từ File Excel", Font = new Font("Segoe UI", 11, FontStyle.Bold), Left = 15, Top = yEx, AutoSize = true };
-            Label lblExcelMoTa = new Label()
+            // [10/11/2026] Mã NV phụ trách = người đang đăng nhập. Thủ kho không sửa được, quản lý được chọn người khác.
+            if (QuanLyNhaThuoc.DTO.PhienDangNhap.DaDangNhap)
             {
-                Text = "Nhập nhiều phiếu cùng lúc, cho phép cả thuốc mới chưa có trong CSDL (tự thêm thuốc và tăng tồn kho).",
-                Left = 15,
-                Top = yEx + 28,
-                Width = 330,
-                Height = 36,
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = Color.DimGray
-            };
-            btnImportExcel = new Button() { Text = "Import Phiếu Nhập (Excel)", Left = 15, Top = yEx + 68, Width = 330, Height = 42, BackColor = Color.FromArgb(33, 115, 70), ForeColor = Color.White, Font = new Font("Segoe UI", 9, FontStyle.Bold), FlatStyle = FlatStyle.Flat };
-            btnTaiFileMau = new Button() { Text = "Tải file Excel mẫu", Left = 15, Top = yEx + 118, Width = 330, Height = 34, BackColor = Color.FromArgb(108, 117, 125), ForeColor = Color.White, Font = new Font("Segoe UI", 9), FlatStyle = FlatStyle.Flat };
-            btnImportExcel.Click += BtnImportExcel_Click;
-            btnTaiFileMau.Click += BtnTaiFileMau_Click;
-            pnlLeft.Controls.Add(lblExcel);
-            pnlLeft.Controls.Add(lblExcelMoTa);
-            pnlLeft.Controls.Add(btnImportExcel);
-            pnlLeft.Controls.Add(btnTaiFileMau);
-
-            // --- PHẢI: TRA CỨU HÓA ĐƠN NHẬP (YÊU CẦU 5) ---
-            // Vùng tìm kiếm dock Top, lưới dock Fill => lưới luôn vừa khít, không bị tràn khỏi panel
-            Panel pnlSearch = new Panel() { Dock = DockStyle.Top, Height = 75 };
-            Label lbl2 = new Label() { Text = "Tra cứu Hóa Đơn Nhập (Theo Mã/Nhân viên/NCC):", Font = new Font("Segoe UI", 10, FontStyle.Bold), Left = 0, Top = 0, AutoSize = true };
-            txtTuKhoaSearch = new TextBox() { Left = 0, Top = 32, Width = 320, Font = new Font("Segoe UI", 10) };
-            btnTimKiemHDN = new Button() { Text = "Tìm kiếm HĐN", Left = 330, Top = 30, Width = 120, Height = 30, BackColor = Color.FromArgb(0, 122, 204), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
-            btnTimKiemHDN.Click += BtnTimKiemHDN_Click;
-            pnlSearch.Controls.Add(lbl2);
-            pnlSearch.Controls.Add(txtTuKhoaSearch);
-            pnlSearch.Controls.Add(btnTimKiemHDN);
-
-            dgvKetQua = new DataGridView()
-            {
-                Dock = DockStyle.Fill,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                ReadOnly = true,
-                BackgroundColor = Color.White
-            };
-
-            pnlRight.Controls.Add(dgvKetQua);
-            pnlRight.Controls.Add(pnlSearch);
-
-            this.Controls.Add(pnlRight);
-            this.Controls.Add(pnlLeft);
-
-            this.ResumeLayout(false);
-            this.PerformLayout();
+                txtMaNV.Text = QuanLyNhaThuoc.DTO.PhienDangNhap.MaNV;
+                if (QuanLyNhaThuoc.DTO.PhienDangNhap.LaThuKho)
+                {
+                    txtMaNV.ReadOnly = true;
+                    txtMaNV.BackColor = Color.FromArgb(240, 242, 245);
+                }
+            }
         }
 
-        private void AddInput(Panel pnl, string text, ref TextBox txt, ref int y)
+        // Gõ mã -> tự hiển thị tên (hoặc cảnh báo nếu chưa có trong CSDL)
+        private void txtMaNV_TextChanged(object sender, EventArgs e)
         {
-            Label lbl = new Label() { Text = text, Left = 15, Top = y, Width = 100, Font = new Font("Segoe UI", 9) };
-            txt = new TextBox() { Left = 115, Top = y - 3, Width = 230, Font = new Font("Segoe UI", 10) };
-            pnl.Controls.Add(lbl);
-            pnl.Controls.Add(txt);
-            y += 45;
+            HienThiGoiY(txtMaNV, lblTenNV, hdnBLL.LayTenNhanVien, "Không có nhân viên này trong CSDL");
         }
 
-        // MỚI: ô nhập kèm 1 dòng chữ nhỏ bên dưới để hiện tên / cảnh báo
-        private Label AddInputCoGoiY(Panel pnl, string text, ref TextBox txt, ref int y)
+        private void txtMaNCC_TextChanged(object sender, EventArgs e)
         {
-            int yGoc = y;
-            AddInput(pnl, text, ref txt, ref y);
-            Label lblGoiY = new Label()
-            {
-                Left = 115,
-                Top = yGoc + 24,
-                Width = 240,
-                Height = 32,
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Italic),
-                ForeColor = Color.Gray
-            };
-            pnl.Controls.Add(lblGoiY);
-            y += 28;
-            return lblGoiY;
+            HienThiGoiY(txtMaNCC, lblTenNCC, hdnBLL.LayTenNhaCungCap, "Nhà cung cấp chưa có trong CSDL");
+        }
+
+        private void txtMaThuoc_TextChanged(object sender, EventArgs e)
+        {
+            HienThiGoiY(txtMaThuoc, lblTenThuoc, hdnBLL.LayTenThuoc, "Cảnh báo: thuốc chưa từng bán (chưa có trong CSDL)");
         }
 
         private void HienThiGoiY(TextBox txt, Label lbl, Func<string, string> traCuu, string thongBaoKhongCo)
@@ -191,10 +99,13 @@ namespace QuanLyNhaThuoc.GUI
             {
                 string maHDN = txtMaHDN.Text.Trim();
                 bool taoPhieuMoi;
-                bool kq = hdnBLL.NhapHangThuCong(maHDN, txtMaNV.Text, txtMaNCC.Text, txtMaThuoc.Text, slNhap, donGia, out taoPhieuMoi);
+                bool kq = hdnBLL.NhapHangThuCong(maHDN, txtMaNV.Text, txtMaNCC.Text, txtMaThuoc.Text, slNhap, donGia,
+                                                 txtSoLo.Text, dtpNgaySX.Checked ? dtpNgaySX.Value.Date : (DateTime?)null,
+                                                 dtpHanSD.Value.Date, out taoPhieuMoi);       // [10/11/2026 lần 5] lô
                 if (kq)
                 {
-                    MessageBox.Show("Nhập hàng thành công! Đã tự động tăng tồn kho và cập nhật giá mới.\n" +
+                    MessageBox.Show("Nhập hàng thành công! Đã tạo lô mới (HSD " + dtpHanSD.Value.ToString("dd/MM/yyyy") +
+                                    "), tăng tồn kho và cập nhật giá mới.\n" +
                                     (taoPhieuMoi ? "Đã tạo phiếu nhập mới " : "Đã thêm thuốc vào phiếu ") + maHDN + ".",
                                     "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
@@ -202,6 +113,7 @@ namespace QuanLyNhaThuoc.GUI
                     txtMaThuoc.Clear();
                     txtSLNhap.Clear();
                     txtDonGia.Clear();
+                    txtSoLo.Clear();
                     txtMaThuoc.Focus();
 
                     dgvKetQua.DataSource = hdnBLL.TimKiemHoaDonNhap(maHDN);
@@ -253,6 +165,7 @@ namespace QuanLyNhaThuoc.GUI
                 string xacNhan = "Đọc được " + kq.DanhSach.Count + " dòng thuốc thuộc " + kq.SoPhieu + " phiếu nhập.\n" +
                                  "- Thuốc mới sẽ thêm vào CSDL: " + kq.SoThuocMoi + "\n" +
                                  "- Nhà cung cấp mới: " + kq.SoNCCMoi + "\n" +
+                                 "- Công dụng mới: " + kq.SoCongDungMoi + "\n" +                     // [10/11/2026]
                                  "- Tổng tiền: " + kq.TongTien.ToString("N0") + " đ\n\n" +
                                  "Xác nhận nhập kho?";
                 if (MessageBox.Show(xacNhan, "Xác nhận import", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
@@ -268,7 +181,8 @@ namespace QuanLyNhaThuoc.GUI
                                 "- " + tk.SoPhieu + " phiếu nhập\n" +
                                 "- " + kq.DanhSach.Count + " dòng thuốc, đã tăng tồn kho\n" +
                                 "- " + tk.SoThuocMoi + " thuốc mới được thêm\n" +
-                                "- " + tk.SoNCCMoi + " nhà cung cấp mới",
+                                "- " + tk.SoNCCMoi + " nhà cung cấp mới\n" +
+                                "- " + tk.SoCongDungMoi + " công dụng mới",                          // [10/11/2026]
                                 "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                 dgvKetQua.DataSource = hdnBLL.TimKiemHoaDonNhap("");

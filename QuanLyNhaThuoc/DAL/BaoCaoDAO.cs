@@ -95,6 +95,52 @@ namespace QuanLyNhaThuoc.DAL
             return ExecuteProcedure("sp_HuyThuocHetHan", parameters);
         }
 
+        // ================== [10/11/2026] DASHBOARD / BIỂU ĐỒ ==================
+
+        // 1 dòng: DoanhThuHomNay, SoHoaDonHomNay, DoanhThuThangNay, SoHoaDonThangNay,
+        //         TienNhapThangNay, SoKhachHang, SoThuocCanhBao
+        public DataTable DashboardTongQuan(int nguongSL, int soNgayCanhBao)
+        {
+            return ExecuteProcedure("sp_Dashboard_TongQuan", new SqlParameter[]
+            {
+                new SqlParameter("@NguongSL", nguongSL),
+                new SqlParameter("@SoNgayCanhBao", soNgayCanhBao)
+            });
+        }
+
+        // 12 dòng: Thang, DoanhThu, SoHoaDon, TienNhap
+        public DataTable DoanhThuTheoThang(int nam)
+        {
+            return ExecuteProcedure("sp_Dashboard_DoanhThuTheoThang", new SqlParameter[] { new SqlParameter("@Nam", nam) });
+        }
+
+        // MaThuoc, TenThuoc, SLBan, DoanhThu
+        public DataTable TopThuocBanChay(int nam, int soLuong)
+        {
+            return ExecuteProcedure("sp_Dashboard_TopThuocBanChay", new SqlParameter[]
+            {
+                new SqlParameter("@Nam", nam),
+                new SqlParameter("@SoLuong", soLuong)
+            });
+        }
+
+        // MaNV, TenNV, SoHoaDon, DoanhThu (tăng dần theo doanh thu)
+        public DataTable DoanhThuNhanVienTheoQuy(int quy, int nam, bool chiTinhNVCoBan)
+        {
+            return ExecuteProcedure("sp_Dashboard_DoanhThuNhanVienTheoQuy", new SqlParameter[]
+            {
+                new SqlParameter("@Quy", quy),
+                new SqlParameter("@Nam", nam),
+                new SqlParameter("@ChiTinhNVCoBan", chiTinhNVCoBan)
+            });
+        }
+
+        // MaHDB, NgayBan, TongTien (tăng dần)
+        public DataTable HoaDonBanTheoNam(int nam)
+        {
+            return ExecuteProcedure("sp_Dashboard_HoaDonBanTheoNam", new SqlParameter[] { new SqlParameter("@Nam", nam) });
+        }
+
         // hàm dùng chung thực thi proc trả về DataTable
         private DataTable ExecuteProcedure(string procName, SqlParameter[] parameters)
         {

@@ -12,6 +12,8 @@ using QuanLyNhaThuoc.BLL;
 
 namespace QuanLyNhaThuoc.GUI
 {
+    // [10/11/2026 lần 5] Giao diện thiết kế bằng Designer (frmBaoCao.Designer.cs): 5 nút báo cáo, banner cảnh báo,
+    // thanh bộ lọc (các nhóm grpXxx ẩn / hiện theo báo cáo), lưới, dòng tổng kết. Hủy thuốc hết hạn nay hủy theo LÔ.
     public partial class frmBaoCao : Form
     {
         private enum LoaiBaoCao { HanSuDung, NhapTheoThang, Top5HDBan, Top2NV, SapHetHang, CanhBao }
@@ -42,16 +44,7 @@ namespace QuanLyNhaThuoc.GUI
         private LoaiBaoCao baoCaoHienTai = LoaiBaoCao.HanSuDung;
         private bool dangKhoiTao = true;
 
-        private DataGridView dgvBaoCao;
-        private Label lblCanhBao, lblTieuDe, lblTongKet;
-        private Button btnXuatExcel, btnHuyHetHan, btnNhapThem;
         private readonly Dictionary<LoaiBaoCao, Button> nutBaoCao = new Dictionary<LoaiBaoCao, Button>();
-
-        // Bộ lọc: mỗi nhóm = nhãn + control, ẩn/hiện theo báo cáo đang chọn
-        private ComboBox cboTrangThaiHSD, cboThang, cboQuy, cboLoaiCanhBao;
-        private NumericUpDown nudSoNgayCanhBao, nudNam, nudNguongSL;
-        private CheckBox chkChiNVCoBan;
-        private Control grpTrangThaiHSD, grpSoNgayCanhBao, grpThang, grpQuy, grpNam, grpChiNVCoBan, grpNguongSL, grpLoaiCanhBao;
 
         // Số liệu cảnh báo mới nhất (cập nhật mỗi lần tải)
         private int soThuocHetHan, soThuocCanHan, soThuocHetHang, soThuocGanHetHang;
@@ -80,11 +73,23 @@ namespace QuanLyNhaThuoc.GUI
 
         public frmBaoCao()
         {
-            this.AutoScaleDimensions = new SizeF(96F, 96F);
-            this.AutoScaleMode = AutoScaleMode.Dpi;
+            InitializeComponent();
+            this.Dock = DockStyle.Fill;
 
-            this.Text = "Báo Cáo & Thống Kê Quản Trị";
-            InitializeComponentCustom();
+            nutBaoCao[LoaiBaoCao.HanSuDung] = btnBC1;
+            nutBaoCao[LoaiBaoCao.NhapTheoThang] = btnBC2;
+            nutBaoCao[LoaiBaoCao.Top5HDBan] = btnBC3;
+            nutBaoCao[LoaiBaoCao.Top2NV] = btnBC4;
+            nutBaoCao[LoaiBaoCao.SapHetHang] = btnBC5;
+
+            // giá trị mặc định theo ngày hiện tại / hằng số trong BLL (dangKhoiTao = true nên chưa tải báo cáo)
+            cboLoaiCanhBao.SelectedIndex = 0;
+            cboTrangThaiHSD.SelectedIndex = 0;
+            cboThang.SelectedIndex = DateTime.Today.Month - 1;
+            cboQuy.SelectedIndex = (DateTime.Today.Month - 1) / 3;
+            nudNam.Value = DateTime.Today.Year;
+            nudSoNgayCanhBao.Value = BaoCaoBLL.SO_NGAY_SAP_HET_HAN;
+            nudNguongSL.Value = BaoCaoBLL.NGUONG_SAP_HET_HANG;
         }
 
         protected override void OnLoad(EventArgs e)
@@ -95,242 +100,19 @@ namespace QuanLyNhaThuoc.GUI
         }
 
         // ================================================================
-        // GIAO DIỆN
+        // SỰ KIỆN GẮN TỪ DESIGNER
         // ================================================================
-        private void InitializeComponentCustom()
-        {
-            this.SuspendLayout();
+        private void btnBC1_Click(object sender, EventArgs e) { ChonBaoCao(LoaiBaoCao.HanSuDung); }
+        private void btnBC2_Click(object sender, EventArgs e) { ChonBaoCao(LoaiBaoCao.NhapTheoThang); }
+        private void btnBC3_Click(object sender, EventArgs e) { ChonBaoCao(LoaiBaoCao.Top5HDBan); }
+        private void btnBC4_Click(object sender, EventArgs e) { ChonBaoCao(LoaiBaoCao.Top2NV); }
+        private void btnBC5_Click(object sender, EventArgs e) { ChonBaoCao(LoaiBaoCao.SapHetHang); }
+        private void lblCanhBao_Click(object sender, EventArgs e) { MoTrangCanhBao(); }
 
-            this.BackColor = Color.FromArgb(244, 246, 249);
-            this.Dock = DockStyle.Fill;
+        // Mọi ô lọc (combo / số / checkbox) đổi giá trị -> tải lại báo cáo
+        private void boLoc_Changed(object sender, EventArgs e) { TaiBaoCao(); }
 
-            // Thanh nút báo cáo
-            FlowLayoutPanel pnlTop = new FlowLayoutPanel()
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = true,
-                BackColor = Color.White,
-                Padding = new Padding(10)
-            };
-
-            nutBaoCao[LoaiBaoCao.HanSuDung] = CreateButton(pnlTop, "1. Hạn Sử Dụng (Y/C 6)", (s, e) => ChonBaoCao(LoaiBaoCao.HanSuDung));
-            nutBaoCao[LoaiBaoCao.NhapTheoThang] = CreateButton(pnlTop, "2. Nhập Theo Tháng (Y/C 7)", (s, e) => ChonBaoCao(LoaiBaoCao.NhapTheoThang));
-            nutBaoCao[LoaiBaoCao.Top5HDBan] = CreateButton(pnlTop, "3. Top 5 HĐ Bán Ít (Y/C 8)", (s, e) => ChonBaoCao(LoaiBaoCao.Top5HDBan));
-            nutBaoCao[LoaiBaoCao.Top2NV] = CreateButton(pnlTop, "4. Top 2 NV Bán Ít (Y/C 9)", (s, e) => ChonBaoCao(LoaiBaoCao.Top2NV));
-            nutBaoCao[LoaiBaoCao.SapHetHang] = CreateButton(pnlTop, "5. ⚠ Thuốc Sắp Hết Hàng", (s, e) => ChonBaoCao(LoaiBaoCao.SapHetHang));
-            nutBaoCao[LoaiBaoCao.SapHetHang].BackColor = MAU_NUT_CANH_BAO;
-
-            // Banner cảnh báo: bấm vào => mở trang chi tiết cảnh báo
-            lblCanhBao = new Label()
-            {
-                Dock = DockStyle.Top,
-                AutoSize = false,
-                Height = 34,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(15, 0, 15, 0),
-                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
-                Cursor = Cursors.Hand,
-                Visible = false
-            };
-            lblCanhBao.Click += (s, e) => MoTrangCanhBao();
-
-            // Thanh bộ lọc
-            FlowLayoutPanel pnlLoc = new FlowLayoutPanel()
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = true,
-                BackColor = Color.FromArgb(250, 251, 253),
-                Padding = new Padding(12, 8, 12, 4)
-            };
-
-            lblTieuDe = new Label()
-            {
-                AutoSize = true,
-                Font = new Font("Segoe UI", 11F, FontStyle.Bold),
-                ForeColor = Color.FromArgb(33, 37, 41),
-                Margin = new Padding(3, 7, 20, 3)
-            };
-            pnlLoc.Controls.Add(lblTieuDe);
-
-            cboLoaiCanhBao = TaoCombo(140, "Tất cả cảnh báo", "Hết hạn", "Cận hạn", "Hết hàng", "Gần hết hàng");
-            grpLoaiCanhBao = TaoNhom(pnlLoc, "Lọc theo:", cboLoaiCanhBao);
-
-            cboTrangThaiHSD = TaoCombo(110, "Tất cả", "Còn hạn", "Đã hết hạn");
-            grpTrangThaiHSD = TaoNhom(pnlLoc, "Hiển thị:", cboTrangThaiHSD);
-
-            nudSoNgayCanhBao = TaoSo(0, 365, BaoCaoBLL.SO_NGAY_SAP_HET_HAN, 60);
-            grpSoNgayCanhBao = TaoNhom(pnlLoc, "Cảnh báo trước (ngày):", nudSoNgayCanhBao);
-
-            cboThang = TaoCombo(90);
-            for (int i = 1; i <= 12; i++) cboThang.Items.Add("Tháng " + i);
-            cboThang.SelectedIndex = DateTime.Today.Month - 1;
-            grpThang = TaoNhom(pnlLoc, "Tháng:", cboThang);
-
-            cboQuy = TaoCombo(80, "Quý 1", "Quý 2", "Quý 3", "Quý 4");
-            cboQuy.SelectedIndex = (DateTime.Today.Month - 1) / 3;
-            grpQuy = TaoNhom(pnlLoc, "Quý:", cboQuy);
-
-            nudNam = TaoSo(2000, 2100, DateTime.Today.Year, 70);
-            grpNam = TaoNhom(pnlLoc, "Năm:", nudNam);
-
-            nudNguongSL = TaoSo(1, 100000, BaoCaoBLL.NGUONG_SAP_HET_HANG, 70);
-            grpNguongSL = TaoNhom(pnlLoc, "Số lượng dưới:", nudNguongSL);
-
-            chkChiNVCoBan = new CheckBox()
-            {
-                Text = "Chỉ tính NV có bán hàng trong quý",
-                AutoSize = true,
-                Checked = true,
-                Font = new Font("Segoe UI", 9F),
-                Margin = new Padding(3, 7, 15, 3)
-            };
-            chkChiNVCoBan.CheckedChanged += (s, e) => TaiBaoCao();
-            pnlLoc.Controls.Add(chkChiNVCoBan);
-            grpChiNVCoBan = chkChiNVCoBan;
-
-            // Báo cáo 1-5: Xuất Excel | Trang cảnh báo: Hủy thuốc hết hạn + Nhập thêm hàng
-            btnXuatExcel = TaoNutLoc(pnlLoc, "Xuất Excel", 120, MAU_XANH_LA, BtnXuatExcel_Click);
-            btnHuyHetHan = TaoNutLoc(pnlLoc, "Hủy thuốc hết hạn", 170, MAU_HUY, BtnHuyHetHan_Click);
-            btnNhapThem = TaoNutLoc(pnlLoc, "Nhập thêm hàng", 150, MAU_NUT, BtnNhapThem_Click);
-
-            // Lưới dữ liệu
-            dgvBaoCao = new DataGridView()
-            {
-                Dock = DockStyle.Fill,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                ReadOnly = true,
-                AllowUserToAddRows = false,
-                AllowUserToDeleteRows = false,
-                RowHeadersVisible = false,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                BackgroundColor = Color.White,
-                BorderStyle = BorderStyle.None
-            };
-            dgvBaoCao.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            dgvBaoCao.DefaultCellStyle.Font = new Font("Segoe UI", 9F);
-            dgvBaoCao.DataBindingComplete += (s, e) => DinhDangCot();
-            dgvBaoCao.CellFormatting += DgvBaoCao_CellFormatting;
-
-            Panel pnlGridContainer = new Panel() { Dock = DockStyle.Fill, Padding = new Padding(15, 10, 15, 5) };
-            pnlGridContainer.Controls.Add(dgvBaoCao);
-
-            // Dòng tổng kết dưới cùng
-            lblTongKet = new Label()
-            {
-                Dock = DockStyle.Bottom,
-                AutoSize = false,
-                Height = 36,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(15, 0, 15, 0),
-                BackColor = Color.White,
-                ForeColor = Color.FromArgb(0, 70, 140),
-                Font = new Font("Segoe UI", 10F, FontStyle.Bold)
-            };
-
-            // Fill thêm trước => dock sau cùng; các Top thêm sau cùng sẽ nằm trên cùng
-            this.Controls.Add(pnlGridContainer);
-            this.Controls.Add(lblTongKet);
-            this.Controls.Add(pnlLoc);
-            this.Controls.Add(lblCanhBao);
-            this.Controls.Add(pnlTop);
-
-            this.ResumeLayout(false);
-            this.PerformLayout();
-        }
-
-        private Button CreateButton(Control parent, string text, EventHandler onClick)
-        {
-            Button btn = new Button()
-            {
-                Text = text,
-                Width = 210,
-                Height = 38,
-                Margin = new Padding(5),
-                BackColor = MAU_NUT,
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                FlatStyle = FlatStyle.Flat
-            };
-            btn.Click += onClick;
-            parent.Controls.Add(btn);
-            return btn;
-        }
-
-        private Button TaoNutLoc(Control parent, string text, int width, Color mau, EventHandler onClick)
-        {
-            Button btn = new Button()
-            {
-                Text = text,
-                Width = width,
-                Height = 30,
-                Margin = new Padding(5, 3, 5, 3),
-                BackColor = mau,
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                FlatStyle = FlatStyle.Flat
-            };
-            btn.FlatAppearance.BorderSize = 0;
-            btn.Click += onClick;
-            parent.Controls.Add(btn);
-            return btn;
-        }
-
-        private ComboBox TaoCombo(int width, params string[] items)
-        {
-            ComboBox cbo = new ComboBox()
-            {
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Width = width,
-                Font = new Font("Segoe UI", 9F)
-            };
-            cbo.Items.AddRange(items);
-            if (items.Length > 0) cbo.SelectedIndex = 0;
-            cbo.SelectedIndexChanged += (s, e) => TaiBaoCao();
-            return cbo;
-        }
-
-        private NumericUpDown TaoSo(int min, int max, int giaTri, int width)
-        {
-            NumericUpDown nud = new NumericUpDown()
-            {
-                Minimum = min,
-                Maximum = max,
-                Value = giaTri,
-                Width = width,
-                Font = new Font("Segoe UI", 9F),
-                TextAlign = HorizontalAlignment.Center
-            };
-            nud.ValueChanged += (s, e) => TaiBaoCao();
-            return nud;
-        }
-
-        // Gói nhãn + control vào 1 nhóm để ẩn/hiện cùng nhau
-        private Control TaoNhom(Control parent, string nhan, Control ctl)
-        {
-            FlowLayoutPanel grp = new FlowLayoutPanel()
-            {
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = false,
-                Margin = new Padding(0, 0, 12, 0)
-            };
-            Label lbl = new Label()
-            {
-                Text = nhan,
-                AutoSize = true,
-                Font = new Font("Segoe UI", 9F),
-                Margin = new Padding(3, 8, 3, 3)
-            };
-            ctl.Margin = new Padding(3, 4, 3, 3);
-            grp.Controls.Add(lbl);
-            grp.Controls.Add(ctl);
-            parent.Controls.Add(grp);
-            return grp;
-        }
+        private void dgvBaoCao_DataBindingComplete(object sender, DataGridViewBindingCompleteEventArgs e) { DinhDangCot(); }
 
         // ================================================================
         // CHỌN / TẢI BÁO CÁO
@@ -355,12 +137,13 @@ namespace QuanLyNhaThuoc.GUI
             grpThang.Visible = loai == LoaiBaoCao.NhapTheoThang;
             grpQuy.Visible = loai == LoaiBaoCao.Top2NV;
             grpNam.Visible = loai == LoaiBaoCao.NhapTheoThang || loai == LoaiBaoCao.Top5HDBan || loai == LoaiBaoCao.Top2NV;
-            grpChiNVCoBan.Visible = loai == LoaiBaoCao.Top2NV;
+            chkChiNVCoBan.Visible = loai == LoaiBaoCao.Top2NV;
             grpNguongSL.Visible = loai == LoaiBaoCao.SapHetHang;
 
             btnXuatExcel.Visible = !laTrangCanhBao;
             btnHuyHetHan.Visible = laTrangCanhBao;
             btnNhapThem.Visible = laTrangCanhBao;
+            btnBieuDo.Visible = loai == LoaiBaoCao.Top5HDBan || loai == LoaiBaoCao.Top2NV;   // [10/11/2026]
 
             switch (loai)
             {
@@ -522,7 +305,7 @@ namespace QuanLyNhaThuoc.GUI
                 lblCanhBao.Visible = true;
 
                 btnHuyHetHan.Enabled = soThuocHetHan > 0;
-                btnHuyHetHan.Text = soThuocHetHan > 0 ? "Hủy thuốc hết hạn (" + soThuocHetHan + ")" : "Hủy thuốc hết hạn";
+                btnHuyHetHan.Text = soThuocHetHan > 0 ? "Hủy lô thuốc hết hạn (" + soThuocHetHan + ")" : "Hủy lô thuốc hết hạn";
                 btnHuyHetHan.BackColor = soThuocHetHan > 0 ? MAU_HUY : Color.Silver;
             }
             catch
@@ -538,37 +321,39 @@ namespace QuanLyNhaThuoc.GUI
         {
             try
             {
-                // lấy lại danh sách mới nhất từ CSDL để xác nhận đúng những gì sẽ hủy
-                DataTable dtHetHan = bcBLL.DanhSachCanhBao(BaoCaoBLL.CB_HET_HAN);
-                if (dtHetHan.Rows.Count == 0)
+                // [10/11/2026 lần 5] hủy theo LÔ: lấy các lô đã hết hạn còn hàng (lô còn hạn của cùng thuốc vẫn giữ)
+                List<DataRow> loHetHan = new ThuocBLL().LayLoThuoc(null, true).AsEnumerable()
+                                             .Where(r => Convert.ToInt32(r["MucCanhBao"]) == 2).ToList();
+                if (loHetHan.Count == 0)
                 {
-                    MessageBox.Show("Không có thuốc hết hạn nào cần hủy.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show("Không có lô thuốc hết hạn nào cần hủy.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     TaiBaoCao();
                     return;
                 }
 
                 List<string> dong = new List<string>();
                 int i = 0;
-                foreach (DataRow r in dtHetHan.Rows)
+                foreach (DataRow r in loHetHan)
                 {
-                    if (++i > 10) { dong.Add("   ... và " + (dtHetHan.Rows.Count - 10) + " thuốc khác"); break; }
-                    dong.Add(string.Format("   • {0} - {1}: SL {2}, hạn {3:dd/MM/yyyy}",
-                        r["MaThuoc"], r["TenThuoc"], r["SLHienCo"], r["HanSD"]));
+                    if (++i > 10) { dong.Add("   ... và " + (loHetHan.Count - 10) + " lô khác"); break; }
+                    dong.Add(string.Format("   • {0} - {1}, lô {2}: SL {3}, hạn {4:dd/MM/yyyy}",
+                        r["MaThuoc"], r["TenThuoc"], r["SoLo"], r["SLCon"], r["HanSD"]));
                 }
+                decimal giaTri = loHetHan.Sum(r => Convert.ToDecimal(r["GiaTriTon"]));
 
                 string xacNhan = string.Format(
-                    "Hủy {0} thuốc đã hết hạn (tổng giá trị nhập {1} đ):\n\n{2}\n\n" +
-                    "Số lượng tồn của các thuốc này sẽ về 0 và được ghi vào lịch sử hủy.\nBạn có chắc chắn muốn hủy?",
-                    dtHetHan.Rows.Count, TongCot(dtHetHan, "GiaTriTon").ToString("N0", VN), string.Join("\n", dong));
+                    "Hủy {0} lô thuốc đã hết hạn (tổng giá trị nhập {1} đ):\n\n{2}\n\n" +
+                    "Số lượng còn của các LÔ này sẽ về 0 và được ghi vào lịch sử hủy (lô còn hạn vẫn bán bình thường).\nBạn có chắc chắn muốn hủy?",
+                    loHetHan.Count, giaTri.ToString("N0", VN), string.Join("\n", dong));
 
                 if (MessageBox.Show(xacNhan, "Xác nhận hủy thuốc hết hạn", MessageBoxButtons.YesNo,
                         MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
                     return;
 
-                // TODO: truyền mã NV đang đăng nhập nếu project có lưu (vd: bcBLL.HuyThuocHetHan(Session.MaNV))
-                DataTable kq = bcBLL.HuyThuocHetHan();
+                // [10/11/2026] ghi nhận người hủy = nhân viên đang đăng nhập
+                DataTable kq = bcBLL.HuyThuocHetHan(QuanLyNhaThuoc.DTO.PhienDangNhap.MaNV);
                 DataRow k = kq.Rows[0];
-                MessageBox.Show(string.Format("Đã hủy {0} thuốc, tổng số lượng {1}, giá trị {2} đ.",
+                MessageBox.Show(string.Format("Đã hủy lô hết hạn của {0} thuốc, tổng số lượng {1}, giá trị {2} đ.",
                         k["SoThuocHuy"], Convert.ToInt32(k["TongSLHuy"]).ToString("N0", VN),
                         Convert.ToDecimal(k["TongGiaTriHuy"]).ToString("N0", VN)),
                     "Hủy thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -684,6 +469,26 @@ namespace QuanLyNhaThuoc.GUI
             {
                 MessageBox.Show("Không mở được trang Nhập hàng: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return true; // đã báo lỗi rồi, không báo thêm
+            }
+        }
+
+        // ================================================================
+        // [10/11/2026] NÚT: BIỂU ĐỒ SO SÁNH (Top 5 HĐ bán ít / Top 2 NV bán ít)
+        // ================================================================
+        private void BtnBieuDo_Click(object sender, EventArgs e)
+        {
+            int nam = (int)nudNam.Value;
+            try
+            {
+                if (baoCaoHienTai == LoaiBaoCao.Top5HDBan)
+                    frmBieuDo.MoBieuDoHoaDon(this.TopLevelControl ?? this, nam);
+                else if (baoCaoHienTai == LoaiBaoCao.Top2NV)
+                    frmBieuDo.MoBieuDoNhanVien(this.TopLevelControl ?? this, cboQuy.SelectedIndex + 1, nam, chkChiNVCoBan.Checked);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Lỗi vẽ biểu đồ: " + ex.Message + "\n\nHãy chạy lại file CSDL_QuanLyNhaThuoc.sql để tạo các proc sp_Dashboard_*.",
+                    "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
