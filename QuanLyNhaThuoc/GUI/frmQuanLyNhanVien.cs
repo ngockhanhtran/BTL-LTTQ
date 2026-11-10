@@ -10,38 +10,31 @@ namespace QuanLyNhaThuoc.GUI
 {
     /// <summary>
     /// [10/11/2026] Quản lý nhân viên (chỉ quản lý):
-    /// - Xem toàn bộ thông tin NV + mật khẩu đăng nhập.
+    /// - Xem toàn bộ thông tin NV. [10/11/2026 lần 5] Mật khẩu lưu dạng BĂM (SHA-256 + salt) nên KHÔNG xem được nữa,
+    ///   quản lý chỉ ĐẶT LẠI (ô "Mật khẩu mới", để trống = giữ nguyên); NV được đặt lại phải đổi khi đăng nhập.
     /// - NV đã bấm "Quên mật khẩu" -> dòng tô VÀNG, lên đầu danh sách. Chọn NV, nhập mật khẩu mới (hoặc
     ///   bấm "Mặc định"), bấm Lưu -> hết vàng.
     /// - Thêm / sửa / xóa NV. NV đã có hóa đơn không xóa được -> chuyển "Đã nghỉ việc" (khóa đăng nhập).
+    /// Giao diện thiết kế bằng Designer (frmQuanLyNhanVien.Designer.cs).
     /// </summary>
-    public class frmQuanLyNhanVien : Form
+    public partial class frmQuanLyNhanVien : Form
     {
         /// <summary>Phát ra sau khi thêm / sửa / xóa (form chính cập nhật số yêu cầu quên mật khẩu).</summary>
         public event EventHandler DuLieuThayDoi;
 
         private readonly NhanVienBLL nvBLL = new NhanVienBLL();
 
-        private DataGridView dgv;
-        private TextBox txtTimKiem, txtMaNV, txtTenNV, txtDienThoai, txtDiaChi, txtMatKhau;
-        private DateTimePicker dtpNgaySinh;
-        private ComboBox cboLoc, cboGioiTinh, cboTrinhDo, cboChuyenMon, cboVaiTro;
-        private CheckBox chkNghiViec;
-        private Label lblYeuCau, lblCanhBaoNV, lblCheDo;
-        private Button btnThem, btnLuu, btnXoa, btnLamMoi, btnMatKhauMacDinh;
-
         private DataTable dtNhanVien;
         private bool dangThemMoi;
         private bool dangNapForm;        // chặn sự kiện khi đang đổ dữ liệu vào ô
         private bool maTuDong;           // mã NV đang là mã gợi ý (chưa sửa tay)
-        private string matKhauCu;        // mật khẩu lúc chọn NV (để biết có đổi không)
         private bool nvDangYeuCau;       // NV đang chọn có yêu cầu quên mật khẩu
 
         private static readonly Dictionary<string, string> TEN_COT = new Dictionary<string, string>
         {
             { "MaNV", "Mã NV" }, { "TenNV", "Họ tên" }, { "NgaySinh", "Ngày sinh" }, { "GioiTinh", "Giới tính" },
             { "DienThoai", "Điện thoại" }, { "DiaChi", "Địa chỉ" }, { "TenTrinhDo", "Trình độ" },
-            { "TenChuyenMon", "Chuyên môn" }, { "TenVaiTro", "Vai trò" }, { "MatKhau", "Mật khẩu" },
+            { "TenChuyenMon", "Chuyên môn" }, { "TenVaiTro", "Vai trò" }, { "PhaiDoiMK", "Phải đổi MK" },
             { "TrangThai", "Trạng thái" }
         };
         private static readonly HashSet<string> COT_AN = new HashSet<string>
@@ -51,10 +44,16 @@ namespace QuanLyNhaThuoc.GUI
 
         public frmQuanLyNhanVien()
         {
-            this.AutoScaleDimensions = new SizeF(96F, 96F);
-            this.AutoScaleMode = AutoScaleMode.Dpi;
-            this.Text = "Quản lý Nhân viên";
-            InitializeComponentCustom();
+            InitializeComponent();
+            this.Dock = DockStyle.Fill;
+
+            // Phần lấy từ hằng số trong BLL (không đặt cứng trong Designer)
+            txtMatKhau.MaxLength = NhanVienBLL.DO_DAI_MK_TOI_DA;
+            lblGoiYMK.Text = "Để trống = giữ mật khẩu cũ. Tối thiểu " + NhanVienBLL.DO_DAI_MK_TOI_THIEU + " ký tự";
+            // Tag = màu gốc của nút (GiaoDien.BatTatNut dùng để bật lại)
+            foreach (Button b in new[] { btnTim, btnMatKhauMacDinh, btnThem, btnLuu, btnXoa, btnLamMoi })
+                b.Tag = b.BackColor;
+            cboLoc.SelectedIndex = 0;
         }
 
         protected override void OnLoad(EventArgs e)
@@ -65,188 +64,54 @@ namespace QuanLyNhaThuoc.GUI
         }
 
         // ================================================================
-        // GIAO DIỆN
+        // SỰ KIỆN GẮN TỪ DESIGNER
         // ================================================================
-        private void InitializeComponentCustom()
+        private void txtTimKiem_KeyDown(object sender, KeyEventArgs e)
         {
-            this.SuspendLayout();
-            this.BackColor = GiaoDien.MauNen;
-            this.Dock = DockStyle.Fill;
+            if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; TaiDanhSach(null); }
+        }
 
-            // ---------- Thanh tìm kiếm ----------
-            Panel pnlTren = new Panel() { Dock = DockStyle.Top, Height = 56, BackColor = Color.White, Padding = new Padding(15, 0, 15, 0) };
-            Label lblTim = new Label() { Text = "Tìm (mã, tên, SĐT, vai trò):", Left = 15, Top = 18, AutoSize = true, Font = GiaoDien.TaoFont(9.5F) };
-            txtTimKiem = new TextBox() { Left = 195, Top = 15, Width = 220, Font = GiaoDien.TaoFont(10F) };
-            txtTimKiem.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; TaiDanhSach(null); } };
-            Button btnTim = GiaoDien.TaoNut("Tìm", GiaoDien.MauXanh, 70, 30);
-            btnTim.Left = 425; btnTim.Top = 13;
-            btnTim.Click += (s, e) => TaiDanhSach(null);
+        private void btnTim_Click(object sender, EventArgs e) { TaiDanhSach(null); }
+        private void cboLoc_SelectedIndexChanged(object sender, EventArgs e) { ApDungLoc(); }
+        private void lblYeuCau_Click(object sender, EventArgs e) { cboLoc.SelectedIndex = 3; }
 
-            Label lblLoc = new Label() { Text = "Hiển thị:", Left = 512, Top = 18, AutoSize = true, Font = GiaoDien.TaoFont(9.5F) };
-            cboLoc = new ComboBox() { Left = 572, Top = 15, Width = 200, DropDownStyle = ComboBoxStyle.DropDownList, Font = GiaoDien.TaoFont(9.5F) };
-            cboLoc.Items.AddRange(new object[] { "Tất cả", "Đang làm việc", "Đã nghỉ việc", "Đang yêu cầu cấp lại MK" });
+        private void dgv_DataBindingComplete(object sender, DataGridViewBindingCompleteEventArgs e)
+        {
+            GiaoDien.DinhDangCot(dgv, TEN_COT, COT_AN, null, new[] { "NgaySinh" });
+        }
+
+        private void dgv_SelectionChanged(object sender, EventArgs e)
+        {
+            if (!dangThemMoi) HienThiDongDangChon();
+        }
+
+        private void txtMaNV_TextChanged(object sender, EventArgs e)
+        {
+            if (dangNapForm || !dangThemMoi) return;
+            maTuDong = false;
+        }
+
+        // Thêm mới: đổi vai trò -> gợi ý lại mã NV theo vai trò (QLxxx / TKxxx / NVxx)
+        private void cboVaiTro_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (dangNapForm || !dangThemMoi || !maTuDong) return;
+            GoiYMaMoi();
+        }
+
+        private void btnMatKhauMacDinh_Click(object sender, EventArgs e)
+        {
+            txtMatKhau.Text = NhanVienBLL.MatKhauMacDinh(txtMaNV.Text);
+        }
+
+        private void btnThem_Click(object sender, EventArgs e) { BatDauThemMoi(); }
+        private void btnLuu_Click(object sender, EventArgs e) { Luu(); }
+        private void btnXoa_Click(object sender, EventArgs e) { Xoa(); }
+
+        private void btnLamMoi_Click(object sender, EventArgs e)
+        {
+            txtTimKiem.Clear();
             cboLoc.SelectedIndex = 0;
-            cboLoc.SelectedIndexChanged += (s, e) => ApDungLoc();
-
-            lblYeuCau = new Label()
-            {
-                Dock = DockStyle.Right,
-                Width = 330,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Font = GiaoDien.TaoFont(9.5F, FontStyle.Bold),
-                BackColor = GiaoDien.VangNen,
-                ForeColor = GiaoDien.VangChu,
-                Cursor = Cursors.Hand,
-                Visible = false
-            };
-            lblYeuCau.Click += (s, e) => cboLoc.SelectedIndex = 3;
-            pnlTren.Controls.AddRange(new Control[] { lblTim, txtTimKiem, btnTim, lblLoc, cboLoc, lblYeuCau });
-
-            // ---------- Lưới ----------
-            dgv = GiaoDien.TaoLuoi();
-            dgv.DataBindingComplete += (s, e) => GiaoDien.DinhDangCot(dgv, TEN_COT, COT_AN, null, new[] { "NgaySinh" });
-            dgv.CellFormatting += Dgv_CellFormatting;
-            dgv.SelectionChanged += (s, e) => { if (!dangThemMoi) HienThiDongDangChon(); };
-            Panel pnlLuoi = new Panel() { Dock = DockStyle.Fill, Padding = new Padding(0, 10, 10, 0) };
-            pnlLuoi.Controls.Add(dgv);
-
-            // ---------- Khung nhập liệu ----------
-            Panel pnlPhai = new Panel() { Dock = DockStyle.Right, Width = 390, BackColor = Color.White, AutoScroll = true, Margin = new Padding(10) };
-            TaoKhungNhapLieu(pnlPhai);
-
-            Panel pnlGiua = new Panel() { Dock = DockStyle.Fill, Padding = new Padding(0, 10, 0, 0) };
-            pnlGiua.Controls.Add(pnlLuoi);
-            pnlGiua.Controls.Add(pnlPhai);
-
-            this.Controls.Add(pnlGiua);
-            this.Controls.Add(pnlTren);
-            this.ResumeLayout(false);
-            this.PerformLayout();
-        }
-
-        private void TaoKhungNhapLieu(Panel p)
-        {
-            int x1 = 18, x2 = 128, rong = 235, y = 15;
-
-            p.Controls.Add(new Label() { Text = "Thông tin nhân viên", Left = x1, Top = y, AutoSize = true, Font = GiaoDien.TaoFont(12F, FontStyle.Bold) });
-            lblCheDo = new Label() { Left = x1, Top = y + 26, Width = 345, Height = 20, Font = GiaoDien.TaoFont(9F, FontStyle.Italic), ForeColor = GiaoDien.MauXam };
-            p.Controls.Add(lblCheDo);
-            y += 52;
-
-            lblCanhBaoNV = new Label()
-            {
-                Left = x1,
-                Top = y,
-                Width = 345,
-                Height = 50,
-                Padding = new Padding(8, 4, 8, 4),
-                BackColor = GiaoDien.VangNen,
-                ForeColor = GiaoDien.VangChu,
-                Font = GiaoDien.TaoFont(9F, FontStyle.Bold),
-                Visible = false
-            };
-            p.Controls.Add(lblCanhBaoNV);
-            y += 58;
-
-            p.Controls.Add(GiaoDien.TaoNhan("Mã NV:", x1, y, 105));
-            txtMaNV = GiaoDien.TaoO(x2, y, rong);
-            txtMaNV.CharacterCasing = CharacterCasing.Upper;
-            txtMaNV.MaxLength = 10;
-            txtMaNV.TextChanged += (s, e) =>
-            {
-                if (dangNapForm || !dangThemMoi) return;
-                maTuDong = false;
-            };
-            p.Controls.Add(txtMaNV); y += 36;
-
-            p.Controls.Add(GiaoDien.TaoNhan("Họ tên:", x1, y, 105));
-            txtTenNV = GiaoDien.TaoO(x2, y, rong); txtTenNV.MaxLength = 50;
-            p.Controls.Add(txtTenNV); y += 36;
-
-            p.Controls.Add(GiaoDien.TaoNhan("Ngày sinh:", x1, y, 105));
-            dtpNgaySinh = new DateTimePicker()
-            {
-                Left = x2,
-                Top = y,
-                Width = 160,
-                Format = DateTimePickerFormat.Custom,
-                CustomFormat = "dd/MM/yyyy",
-                ShowCheckBox = true,
-                Font = GiaoDien.TaoFont(10F)
-            };
-            p.Controls.Add(dtpNgaySinh); y += 36;
-
-            p.Controls.Add(GiaoDien.TaoNhan("Giới tính:", x1, y, 105));
-            cboGioiTinh = new ComboBox() { Left = x2, Top = y, Width = 120, DropDownStyle = ComboBoxStyle.DropDownList, Font = GiaoDien.TaoFont(10F) };
-            cboGioiTinh.Items.AddRange(new object[] { "Nam", "Nữ", "Khác" });
-            p.Controls.Add(cboGioiTinh); y += 36;
-
-            p.Controls.Add(GiaoDien.TaoNhan("Điện thoại:", x1, y, 105));
-            txtDienThoai = GiaoDien.TaoO(x2, y, rong); txtDienThoai.MaxLength = 20;
-            p.Controls.Add(txtDienThoai); y += 36;
-
-            p.Controls.Add(GiaoDien.TaoNhan("Địa chỉ:", x1, y, 105));
-            txtDiaChi = GiaoDien.TaoO(x2, y, rong); txtDiaChi.MaxLength = 255;
-            p.Controls.Add(txtDiaChi); y += 36;
-
-            p.Controls.Add(GiaoDien.TaoNhan("Trình độ:", x1, y, 105));
-            cboTrinhDo = TaoCombo(x2, y, rong); p.Controls.Add(cboTrinhDo); y += 36;
-
-            p.Controls.Add(GiaoDien.TaoNhan("Chuyên môn:", x1, y, 105));
-            cboChuyenMon = TaoCombo(x2, y, rong); p.Controls.Add(cboChuyenMon); y += 36;
-
-            p.Controls.Add(GiaoDien.TaoNhan("Vai trò (*):", x1, y, 105));
-            cboVaiTro = TaoCombo(x2, y, rong);
-            cboVaiTro.SelectedIndexChanged += (s, e) =>
-            {
-                // Thêm mới: đổi vai trò -> gợi ý lại mã NV theo vai trò (QLxxx / TKxxx / NVxx)
-                if (dangNapForm || !dangThemMoi || !maTuDong) return;
-                GoiYMaMoi();
-            };
-            p.Controls.Add(cboVaiTro); y += 36;
-
-            p.Controls.Add(GiaoDien.TaoNhan("Mật khẩu (*):", x1, y, 105));
-            txtMatKhau = GiaoDien.TaoO(x2, y, 150); txtMatKhau.MaxLength = NhanVienBLL.DO_DAI_MK_TOI_DA;
-            p.Controls.Add(txtMatKhau);
-            btnMatKhauMacDinh = GiaoDien.TaoNut("Mặc định", GiaoDien.MauXam, 80, 27);
-            btnMatKhauMacDinh.Left = x2 + 155; btnMatKhauMacDinh.Top = y - 1;
-            btnMatKhauMacDinh.Font = GiaoDien.TaoFont(8.5F, FontStyle.Bold);
-            btnMatKhauMacDinh.Click += (s, e) => txtMatKhau.Text = NhanVienBLL.MatKhauMacDinh(txtMaNV.Text);
-            p.Controls.Add(btnMatKhauMacDinh); y += 30;
-            p.Controls.Add(new Label()
-            {
-                Text = "Mặc định = mã NV + 11, tối thiểu " + NhanVienBLL.DO_DAI_MK_TOI_THIEU + " ký tự",
-                Left = x2,
-                Top = y,
-                Width = 240,
-                Height = 18,
-                Font = GiaoDien.TaoFont(8F, FontStyle.Italic),
-                ForeColor = Color.Gray
-            });
-            y += 26;
-
-            chkNghiViec = new CheckBox() { Text = "Đã nghỉ việc (khóa đăng nhập)", Left = x2, Top = y, AutoSize = true, Font = GiaoDien.TaoFont(9.5F) };
-            p.Controls.Add(chkNghiViec); y += 40;
-
-            btnThem = GiaoDien.TaoNut("➕ Thêm mới", GiaoDien.MauXanh, 165, 38);
-            btnThem.Left = x1; btnThem.Top = y;
-            btnThem.Click += (s, e) => BatDauThemMoi();
-            btnLuu = GiaoDien.TaoNut("💾 Lưu", GiaoDien.MauXanhLa, 165, 38);
-            btnLuu.Left = x1 + 180; btnLuu.Top = y;
-            btnLuu.Click += (s, e) => Luu();
-            y += 46;
-            btnXoa = GiaoDien.TaoNut("🗑 Xóa", GiaoDien.MauDo, 165, 38);
-            btnXoa.Left = x1; btnXoa.Top = y;
-            btnXoa.Click += (s, e) => Xoa();
-            btnLamMoi = GiaoDien.TaoNut("↻ Làm mới", GiaoDien.MauXam, 165, 38);
-            btnLamMoi.Left = x1 + 180; btnLamMoi.Top = y;
-            btnLamMoi.Click += (s, e) => { txtTimKiem.Clear(); cboLoc.SelectedIndex = 0; TaiDanhSach(null); };
-            p.Controls.AddRange(new Control[] { btnThem, btnLuu, btnXoa, btnLamMoi });
-        }
-
-        private static ComboBox TaoCombo(int x, int y, int rong)
-        {
-            return new ComboBox() { Left = x, Top = y, Width = rong, DropDownStyle = ComboBoxStyle.DropDownList, Font = GiaoDien.TaoFont(10F) };
+            TaiDanhSach(null);
         }
 
         // ================================================================
@@ -326,7 +191,7 @@ namespace QuanLyNhaThuoc.GUI
         }
 
         // Dòng vàng = đang yêu cầu cấp lại mật khẩu; chữ xám = đã nghỉ việc
-        private void Dgv_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        private void dgv_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
         {
             if (e.RowIndex < 0 || !dgv.Columns.Contains("YeuCauDoiMK")) return;
             DataGridViewRow r = dgv.Rows[e.RowIndex];
@@ -383,10 +248,10 @@ namespace QuanLyNhaThuoc.GUI
                 GiaoDien.ChonCombo(cboTrinhDo, GiaoDien.GiaTri(r, "MaTrinhDo"));
                 GiaoDien.ChonCombo(cboChuyenMon, GiaoDien.GiaTri(r, "MaChuyenMon"));
                 GiaoDien.ChonCombo(cboVaiTro, GiaoDien.GiaTri(r, "MaVaiTro"));
-                txtMatKhau.Text = GiaoDien.GiaTri(r, "MatKhau");
+                txtMatKhau.Clear();                    // [10/11/2026 lần 5] không đọc được mật khẩu đã băm
+                lblMatKhau.Text = "Mật khẩu mới:";
                 chkNghiViec.Checked = GiaoDien.GiaTri(r, "NghiViec") == "True";
 
-                matKhauCu = txtMatKhau.Text;
                 nvDangYeuCau = GiaoDien.GiaTri(r, "YeuCauDoiMK") == "True" && !chkNghiViec.Checked;
                 lblCanhBaoNV.Visible = nvDangYeuCau;
                 if (nvDangYeuCau)
@@ -423,7 +288,6 @@ namespace QuanLyNhaThuoc.GUI
             chkNghiViec.Checked = false;
             lblCanhBaoNV.Visible = false;
             nvDangYeuCau = false;
-            matKhauCu = null;
         }
 
         private void BatDauThemMoi()
@@ -438,6 +302,7 @@ namespace QuanLyNhaThuoc.GUI
                 cboGioiTinh.SelectedIndex = 0;
                 GiaoDien.ChonCombo(cboVaiTro, VaiTroNV.BAN_HANG);
                 lblCheDo.Text = "Đang THÊM MỚI nhân viên – điền thông tin rồi bấm Lưu";
+                lblMatKhau.Text = "Mật khẩu (*):";
                 GiaoDien.BatTatNut(btnXoa, false);
             }
             finally { dangNapForm = false; }
@@ -493,7 +358,8 @@ namespace QuanLyNhaThuoc.GUI
                 if (dangThemMoi)
                 {
                     nvBLL.Them(nv);
-                    MessageBox.Show(this, "Đã thêm nhân viên " + nv.MaNV + ".\nMật khẩu đăng nhập: " + nv.MatKhau,
+                    MessageBox.Show(this, "Đã thêm nhân viên " + nv.MaNV + ".\nMật khẩu đăng nhập lần đầu: " + nv.MatKhau +
+                                          "\n(nhân viên sẽ phải đổi mật khẩu khi đăng nhập lần đầu)",
                                     "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
@@ -501,22 +367,24 @@ namespace QuanLyNhaThuoc.GUI
                     bool xuLyYeuCau = false;
                     if (nvDangYeuCau)
                     {
-                        if (nv.MatKhau != matKhauCu)
+                        if (!string.IsNullOrEmpty(nv.MatKhau))       // có nhập mật khẩu mới = cấp lại
                             xuLyYeuCau = true;
                         else
                         {
                             DialogResult kq = MessageBox.Show(this,
-                                "Nhân viên này đang yêu cầu cấp lại mật khẩu nhưng mật khẩu CHƯA thay đổi.\n\n" +
+                                "Nhân viên này đang yêu cầu cấp lại mật khẩu nhưng ô \"Mật khẩu mới\" đang trống.\n\n" +
                                 "Yes: vẫn đánh dấu đã xử lý (giữ mật khẩu cũ)\nNo: chỉ lưu thông tin, yêu cầu vẫn còn\nCancel: quay lại",
                                 "Yêu cầu quên mật khẩu", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
                             if (kq == DialogResult.Cancel) return;
                             xuLyYeuCau = kq == DialogResult.Yes;
                         }
                     }
+                    bool datLaiMK = !string.IsNullOrEmpty(nv.MatKhau);
                     nvBLL.Sua(nv, xuLyYeuCau);
                     MessageBox.Show(this,
-                        xuLyYeuCau ? "Đã cấp lại mật khẩu cho " + nv.MaNV + ": " + nv.MatKhau + "\nHãy báo mật khẩu mới cho nhân viên."
-                                   : "Đã lưu thông tin nhân viên " + nv.MaNV + ".",
+                        datLaiMK ? "Đã đặt lại mật khẩu cho " + nv.MaNV + ": " + nv.MatKhau +
+                                   "\nHãy báo cho nhân viên (mật khẩu chỉ hiện 1 lần này; NV phải đổi khi đăng nhập)."
+                                 : "Đã lưu thông tin nhân viên " + nv.MaNV + ".",
                         "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 TaiDanhSach(nv.MaNV);

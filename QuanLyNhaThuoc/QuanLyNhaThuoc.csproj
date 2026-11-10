@@ -71,6 +71,7 @@
       <HintPath>packages\System.Memory.4.5.5\lib\net461\System.Memory.dll</HintPath>
     </Reference>
     <Reference Include="System.Numerics" />
+    <Reference Include="System.Security" />
     <Reference Include="System.Numerics.Vectors, Version=4.1.4.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>packages\System.Numerics.Vectors.4.5.0\lib\net46\System.Numerics.Vectors.dll</HintPath>
     </Reference>
@@ -158,29 +159,97 @@
     <Compile Include="GUI\frmBieuDo.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="GUI\frmBieuDo.Designer.cs">
+      <DependentUpon>frmBieuDo.cs</DependentUpon>
+    </Compile>
     <Compile Include="GUI\frmChonCongDung.cs">
       <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="GUI\frmChonCongDung.Designer.cs">
+      <DependentUpon>frmChonCongDung.cs</DependentUpon>
     </Compile>
     <Compile Include="GUI\frmDangNhap.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="GUI\frmDangNhap.Designer.cs">
+      <DependentUpon>frmDangNhap.cs</DependentUpon>
+    </Compile>
     <Compile Include="GUI\frmDanhMuc.cs">
       <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="GUI\frmDanhMuc.Designer.cs">
+      <DependentUpon>frmDanhMuc.cs</DependentUpon>
     </Compile>
     <Compile Include="GUI\frmDashboard.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="GUI\frmDashboard.Designer.cs">
+      <DependentUpon>frmDashboard.cs</DependentUpon>
+    </Compile>
     <Compile Include="GUI\frmDoiMatKhau.cs">
       <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="GUI\frmDoiMatKhau.Designer.cs">
+      <DependentUpon>frmDoiMatKhau.cs</DependentUpon>
     </Compile>
     <Compile Include="GUI\frmQuanLyNhanVien.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="GUI\frmQuanLyNhanVien.Designer.cs">
+      <DependentUpon>frmQuanLyNhanVien.cs</DependentUpon>
+    </Compile>
     <Compile Include="GUI\frmQuanLyThuoc.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="GUI\frmQuanLyThuoc.Designer.cs">
+      <DependentUpon>frmQuanLyThuoc.cs</DependentUpon>
+    </Compile>
     <Compile Include="GUI\frmQuenMatKhau.cs">
       <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="GUI\frmQuenMatKhau.Designer.cs">
+      <DependentUpon>frmQuenMatKhau.cs</DependentUpon>
+    </Compile>
+    <!-- [10/11/2026 lần 5] cấu hình kết nối, băm mật khẩu, lô thuốc, trả hàng, nhật ký, sao lưu -->
+    <Compile Include="BLL\BaoMatMatKhau.cs" />
+    <Compile Include="BLL\KetNoiBLL.cs" />
+    <Compile Include="BLL\NhatKyBLL.cs" />
+    <Compile Include="BLL\SaoLuuBLL.cs" />
+    <Compile Include="BLL\TraHangBLL.cs" />
+    <Compile Include="DAL\CauHinhKetNoi.cs" />
+    <Compile Include="DAL\NhatKyDAO.cs" />
+    <Compile Include="DAL\SaoLuuDAO.cs" />
+    <Compile Include="DAL\TraHangDAO.cs" />
+    <Compile Include="DTO\TraHangDTO.cs" />
+    <Compile Include="GUI\frmCauHinhKetNoi.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="GUI\frmCauHinhKetNoi.Designer.cs">
+      <DependentUpon>frmCauHinhKetNoi.cs</DependentUpon>
+    </Compile>
+    <Compile Include="GUI\frmLoThuoc.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="GUI\frmLoThuoc.Designer.cs">
+      <DependentUpon>frmLoThuoc.cs</DependentUpon>
+    </Compile>
+    <Compile Include="GUI\frmNhatKy.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="GUI\frmNhatKy.Designer.cs">
+      <DependentUpon>frmNhatKy.cs</DependentUpon>
+    </Compile>
+    <Compile Include="GUI\frmSaoLuu.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="GUI\frmSaoLuu.Designer.cs">
+      <DependentUpon>frmSaoLuu.cs</DependentUpon>
+    </Compile>
+    <Compile Include="GUI\frmTraHang.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="GUI\frmTraHang.Designer.cs">
+      <DependentUpon>frmTraHang.cs</DependentUpon>
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

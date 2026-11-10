@@ -10,6 +10,7 @@ namespace QuanLyNhaThuoc.BLL
     public class HoaDonBanBLL
     {
         private HoaDonBanDAO hdbDAO = new HoaDonBanDAO();
+        private ThuocDAO thuocDAO = new ThuocDAO();      // [10/11/2026 lần 5] kiểm tra thuốc kê đơn
 
         // Số thứ tự lớn nhất đã cấp trong phiên chạy chương trình.
         // Cần vì hóa đơn chỉ được lưu DB khi thanh toán xong, nên mã đã cấp
@@ -83,7 +84,7 @@ namespace QuanLyNhaThuoc.BLL
                 if (ton == null)
                     return $"Thuốc {d.TenThuoc} không còn trong danh mục!";
                 if (ton.Value < d.SoLuong)
-                    return $"Thuốc {d.TenThuoc} không đủ tồn kho (Còn: {ton.Value}, cần: {d.SoLuong}).";
+                    return $"Thuốc {d.TenThuoc} không đủ hàng CÒN HẠN (Còn: {ton.Value}, cần: {d.SoLuong}).";
             }
             return null;
         }
@@ -125,11 +126,38 @@ namespace QuanLyNhaThuoc.BLL
                     throw new Exception($"Chỉ được dùng tối đa {toiDa} điểm cho hóa đơn này!");
             }
 
+            // [10/11/2026 lần 5] thuốc kê đơn: bắt buộc có mã đơn thuốc (kiểm tra lại theo CSDL)
+            string loiKeDon = KiemTraKeDon(hd);
+            if (loiKeDon != null) throw new Exception(loiKeDon);
+
             int soLanDaMua = khachCu == null ? 0 : khachCu.SoLanMua;
             diemCong = TichDiemBLL.TinhDiemCong(hd.TongThanhToan, soLanDaMua);
 
             diemConLai = hdbDAO.LuuHoaDon(hd, maNV.Trim(), maKhach.Trim(),
                                           tenKhachMoi == null ? null : tenKhachMoi.Trim(), ngayBan, diemCong);
+
+            NhatKyBLL.Ghi(NhatKyBLL.THANH_TOAN, hd.MaHDB,
+                          $"Khách {maKhach.Trim()}, {hd.Dong.Count} loại thuốc, tổng {hd.TongThanhToan:N0} đ" +
+                          (string.IsNullOrWhiteSpace(hd.MaDonThuoc) ? "" : ", đơn thuốc " + hd.MaDonThuoc.Trim()));
+        }
+
+        /// <summary>
+        /// [10/11/2026 lần 5] Hóa đơn có thuốc kê đơn thì phải nhập mã đơn thuốc.
+        /// Đánh dấu lại cờ KeDon cho từng dòng theo CSDL. Trả về null nếu hợp lệ.
+        /// </summary>
+        public string KiemTraKeDon(HoaDonTam hd)
+        {
+            if (hd == null) return null;
+            Dictionary<string, string> keDon = thuocDAO.LayThuocKeDon(hd.Dong.ConvertAll(d => d.MaThuoc));
+            foreach (DongHoaDon d in hd.Dong) d.KeDon = keDon.ContainsKey(d.MaThuoc);
+            if (keDon.Count == 0) return null;
+
+            string ma = (hd.MaDonThuoc ?? "").Trim();
+            if (ma == "")
+                return "Hóa đơn có thuốc KÊ ĐƠN (" + string.Join(", ", keDon.Values) + ").\nVui lòng nhập mã đơn thuốc của bác sĩ.";
+            if (ma.Length > 30)
+                return "Mã đơn thuốc tối đa 30 ký tự.";
+            return null;
         }
     }
 }

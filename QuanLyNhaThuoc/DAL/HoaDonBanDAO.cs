@@ -106,7 +106,7 @@ namespace QuanLyNhaThuoc.DAL
         {
             DataTable dt = SqlHelper.Query(@"
                 SELECT k.MaKhach, k.TenKhach, k.DienThoai, k.DiemTichLuy,
-                       (SELECT COUNT(*) FROM HoaDonBan h WHERE h.MaKhach = k.MaKhach) AS SoLanMua
+                       (SELECT COUNT(*) FROM HoaDonBan h WHERE h.MaKhach = k.MaKhach AND h.DaHuy = 0) AS SoLanMua
                 FROM KhachHang k
                 WHERE k.MaKhach = @MaKhach",
                 SqlHelper.PChuoi("@MaKhach", (maKhach ?? "").Trim()));
@@ -136,10 +136,12 @@ namespace QuanLyNhaThuoc.DAL
         }
 
         // Số lượng tồn hiện tại, hoặc null nếu thuốc không tồn tại
+        // [10/11/2026 lần 5] = số lượng các lô CÒN HẠN (lô hết hạn không được bán)
         public int? GetSoLuongTon(string maThuoc)
         {
             using (SqlConnection conn = db.GetConnection())
-            using (SqlCommand cmd = new SqlCommand("SELECT SLHienCo FROM Thuoc WHERE MaThuoc = @MaThuoc", conn))
+            using (SqlCommand cmd = new SqlCommand(
+                "SELECT dbo.fn_SLBanDuoc(MaThuoc, CAST(GETDATE() AS DATE)) FROM Thuoc WHERE MaThuoc = @MaThuoc", conn))
             {
                 cmd.Parameters.AddWithValue("@MaThuoc", maThuoc);
                 conn.Open();
@@ -157,6 +159,8 @@ namespace QuanLyNhaThuoc.DAL
         //   - Lưu DiemSuDung / TienGiamDiem / DiemCong vào HoaDonBan
         //   - ChiTietHDB.ThanhTien lấy từ hd.PhanBoThanhTien() (đã trừ giảm giá % + đổi điểm)
         //   Trả về số điểm còn lại của khách sau hóa đơn.
+        // [10/11/2026 lần 5] Xuất kho theo LÔ bằng sp_XuatKhoFEFO (lô hết hạn trước bán trước, bỏ lô đã hết hạn);
+        //   lưu mã đơn thuốc (hd.MaDonThuoc) khi có thuốc kê đơn.
         public int LuuHoaDon(HoaDonTam hd, string maNV, string maKhach, string tenKhachMoi, DateTime ngayBan, int diemCong)
         {
             using (SqlConnection conn = db.GetConnection())
@@ -190,8 +194,8 @@ namespace QuanLyNhaThuoc.DAL
                         }
 
                         SqlCommand cmdHD = new SqlCommand(
-                            @"INSERT INTO HoaDonBan (MaHDB, NgayBan, MaNV, MaKhach, TongTien, DiemSuDung, TienGiamDiem, DiemCong)
-                              VALUES (@MaHDB, @NgayBan, @MaNV, @MaKhach, @TongTien, @DiemSuDung, @TienGiamDiem, @DiemCong)",
+                            @"INSERT INTO HoaDonBan (MaHDB, NgayBan, MaNV, MaKhach, TongTien, DiemSuDung, TienGiamDiem, DiemCong, MaDonThuoc)
+                              VALUES (@MaHDB, @NgayBan, @MaNV, @MaKhach, @TongTien, @DiemSuDung, @TienGiamDiem, @DiemCong, @MaDonThuoc)",
                             conn, tran);
                         cmdHD.Parameters.AddWithValue("@MaHDB", hd.MaHDB);
                         cmdHD.Parameters.AddWithValue("@NgayBan", ngayBan);
@@ -201,6 +205,7 @@ namespace QuanLyNhaThuoc.DAL
                         cmdHD.Parameters.AddWithValue("@DiemSuDung", hd.DiemSuDung);
                         cmdHD.Parameters.AddWithValue("@TienGiamDiem", hd.TienGiamDiem);
                         cmdHD.Parameters.AddWithValue("@DiemCong", diemCong);
+                        cmdHD.Parameters.Add(SqlHelper.P("@MaDonThuoc", hd.MaDonThuoc));     // [10/11/2026 lần 5]
                         cmdHD.ExecuteNonQuery();
 
                         // [10/11/2026] Thành tiền thực của từng dòng (tổng = đúng TongThanhToan)
@@ -210,15 +215,17 @@ namespace QuanLyNhaThuoc.DAL
                         {
                             DongHoaDon d = hd.Dong[i];
                             // Khóa dòng thuốc để tránh 2 máy cùng bán vượt tồn
+                            // [10/11/2026 lần 5] chỉ tính các lô CÒN HẠN
                             SqlCommand cmdTon = new SqlCommand(
-                                "SELECT SLHienCo FROM Thuoc WITH (UPDLOCK, ROWLOCK) WHERE MaThuoc = @MaThuoc", conn, tran);
+                                @"SELECT dbo.fn_SLBanDuoc(MaThuoc, CAST(GETDATE() AS DATE))
+                                  FROM Thuoc WITH (UPDLOCK, ROWLOCK) WHERE MaThuoc = @MaThuoc", conn, tran);
                             cmdTon.Parameters.AddWithValue("@MaThuoc", d.MaThuoc);
                             object o = cmdTon.ExecuteScalar();
                             if (o == null || o == DBNull.Value)
                                 throw new Exception($"Thuốc {d.MaThuoc} không còn trong danh mục!");
                             int ton = Convert.ToInt32(o);
                             if (ton < d.SoLuong)
-                                throw new Exception($"Thuốc {d.TenThuoc} không đủ tồn kho (Còn: {ton}, cần: {d.SoLuong})!");
+                                throw new Exception($"Thuốc {d.TenThuoc} không đủ hàng còn hạn (Còn: {ton}, cần: {d.SoLuong})!");
 
                             SqlCommand cmdCT = new SqlCommand(
                                 "INSERT INTO ChiTietHDB (MaHDB, MaThuoc, SoLuong, GiamGia, ThanhTien) VALUES (@MaHDB, @MaThuoc, @SoLuong, @GiamGia, @ThanhTien)",
@@ -230,11 +237,12 @@ namespace QuanLyNhaThuoc.DAL
                             cmdCT.Parameters.AddWithValue("@ThanhTien", thanhTienDong[i]);
                             cmdCT.ExecuteNonQuery();
 
-                            SqlCommand cmdUp = new SqlCommand(
-                                "UPDATE Thuoc SET SLHienCo = SLHienCo - @SoLuong WHERE MaThuoc = @MaThuoc", conn, tran);
-                            cmdUp.Parameters.AddWithValue("@SoLuong", d.SoLuong);
-                            cmdUp.Parameters.AddWithValue("@MaThuoc", d.MaThuoc);
-                            cmdUp.ExecuteNonQuery();
+                            // [10/11/2026 lần 5] trừ kho theo lô FEFO (proc tự cập nhật lại Thuoc.SLHienCo / HanSD)
+                            SqlHelper.ExecProc(conn, tran, "sp_XuatKhoFEFO",
+                                SqlHelper.PChuoi("@MaHDB", hd.MaHDB),
+                                SqlHelper.PChuoi("@MaThuoc", d.MaThuoc),
+                                SqlHelper.P("@SoLuong", d.SoLuong),
+                                SqlHelper.P("@NgayBan", ngayBan));
                         }
 
                         // [10/11/2026] Cập nhật điểm tích lũy của khách

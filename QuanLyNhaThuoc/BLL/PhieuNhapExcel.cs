@@ -38,8 +38,10 @@ namespace QuanLyNhaThuoc.BLL
             new CotExcel("MaDangDC",     false, "Thuốc mới: mã dạng điều chế (phải có trong bảng DangDieuChe)."),
             new CotExcel("ThanhPhan",    false, "Thuốc mới: thành phần."),
             new CotExcel("MaNuocSX",     false, "Thuốc mới: mã nước sản xuất (phải có trong bảng NuocSX)."),
-            new CotExcel("NgaySX",       false, "Thuốc mới: ngày sản xuất (dd/MM/yyyy)."),
-            new CotExcel("HanSD",        false, "Thuốc mới: hạn sử dụng (dd/MM/yyyy), phải sau NgaySX."),
+            // [10/11/2026 lần 5] Mỗi dòng nhập = 1 LÔ thuốc: SoLo, NgaySX, HanSD là thông tin của lô
+            new CotExcel("SoLo",         false, "Số lô in trên hộp. Bỏ trống = tự đặt theo mã phiếu + hạn dùng."),
+            new CotExcel("NgaySX",       false, "Ngày sản xuất của lô (dd/MM/yyyy)."),
+            new CotExcel("HanSD",        false, "Hạn sử dụng của lô (dd/MM/yyyy), phải sau NgaySX. Bỏ trống: thuốc đã có lấy hạn hiện tại (nếu còn > 30 ngày), không thì 2 năm kể từ hôm nay."),
             new CotExcel("ChongChiDinh", false, "Thuốc mới: chống chỉ định."),
             // [10/11/2026] 2 cột tùy chọn mới (file cũ không có 2 cột này vẫn import được)
             new CotExcel("MaVach",       false, "Mã vạch in trên hộp thuốc (để quét khi bán). Điền cho thuốc mới hoặc thuốc đã có chưa có mã vạch. Không trùng thuốc khác."),
@@ -105,6 +107,7 @@ namespace QuanLyNhaThuoc.BLL
                         MaNuocSX = Chuoi(row, viTriCot, "MaNuocSX"),
                         ChongChiDinh = Chuoi(row, viTriCot, "ChongChiDinh"),
                         MaVach = Chuoi(row, viTriCot, "MaVach"),        // [10/11/2026]
+                        SoLo = Chuoi(row, viTriCot, "SoLo"),            // [10/11/2026 lần 5]
                         CongDung = Chuoi(row, viTriCot, "CongDung")     // [10/11/2026]
                     };
 
@@ -163,6 +166,11 @@ namespace QuanLyNhaThuoc.BLL
                     d.HanSD = DocNgay(O(row, viTriCot, "HanSD"), "HanSD", tt, loi);
                     if (d.NgaySX.HasValue && d.HanSD.HasValue && d.HanSD.Value <= d.NgaySX.Value)
                         loi.Add(tt + "HanSD phải sau NgaySX.");
+                    // [10/11/2026 lần 5] không nhập lô đã hết hạn
+                    if (d.HanSD.HasValue && d.HanSD.Value.Date < DateTime.Today)
+                        loi.Add(tt + "HanSD " + d.HanSD.Value.ToString("dd/MM/yyyy") + " đã qua - không nhập lô đã hết hạn.");
+                    if (d.SoLo.Length > 30)
+                        loi.Add(tt + "SoLo tối đa 30 ký tự.");
 
                     ds.Add(d);
                 }
@@ -199,6 +207,7 @@ namespace QuanLyNhaThuoc.BLL
                 Ghi(ws, 2, "MaHDN", "HDN001"); Ghi(ws, 2, "NgayNhap", DateTime.Today);
                 Ghi(ws, 2, "MaNV", "TK001"); Ghi(ws, 2, "MaNCC", "NCC01");   // [10/11/2026] TK001 (trước: NV01)
                 Ghi(ws, 2, "MaThuoc", "TH001");
+                Ghi(ws, 2, "SoLo", "PN2611A"); Ghi(ws, 2, "HanSD", DateTime.Today.AddYears(2));   // [10/11/2026 lần 5] lô
                 Ghi(ws, 2, "SLNhap", 50); Ghi(ws, 2, "DonGia", 15000); Ghi(ws, 2, "KhuyenMai", 0);
 
                 // Dòng mẫu 2: thuốc MỚI -> điền thêm thông tin thuốc
@@ -208,6 +217,7 @@ namespace QuanLyNhaThuoc.BLL
                 Ghi(ws, 3, "MaDVT", "DVT01"); Ghi(ws, 3, "MaDangDC", "DC01");
                 Ghi(ws, 3, "ThanhPhan", "Paracetamol 500mg"); Ghi(ws, 3, "MaNuocSX", "NSX01");
                 Ghi(ws, 3, "NgaySX", new DateTime(2026, 6, 1)); Ghi(ws, 3, "HanSD", new DateTime(2029, 6, 1));
+                Ghi(ws, 3, "SoLo", "EF0626");                                 // [10/11/2026 lần 5]
                 Ghi(ws, 3, "ChongChiDinh", "Suy gan nặng");
                 Ghi(ws, 3, "MaVach", "8935049500018");                       // [10/11/2026]
                 Ghi(ws, 3, "CongDung", "Giảm đau; Hạ sốt");                  // [10/11/2026]

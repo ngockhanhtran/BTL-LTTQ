@@ -97,3 +97,55 @@ G. DANH SÁCH FILE
    Xóa: CSDL_first_edition.sql
    KHÔNG đổi: DAL/DBConnection.cs (giữ chuỗi kết nối của máy mình), frmThanhToan, XuatExcel, *.Designer.cs
    Mọi chỗ sửa trong code đều có ghi chú "[10/11/2026]".
+
+
+Sửa lần 5 (10/11/2026): Chuyển giao diện 5 form chính sang Designer (kéo thả được)
+   - frmDangNhap, frmMain, frmThuoc, frmBanHang, frmQuanLyNhanVien có file *.Designer.cs đầy đủ,
+     mở "View Designer" (Shift+F7) là kéo thả, sửa Properties; sự kiện gắn ở tab Events (tia sét).
+   - Vị trí, cỡ, font, màu chép y nguyên số cũ -> khi chạy giao diện giống hệt trước.
+
+
+Sửa lần 6 (10/11/2026) - kèm SQL "lần 5" (xem LỊCH SỬ CẬP NHẬT đầu file CSDL_QuanLyNhaThuoc.sql)
+A. TOÀN BỘ 20 FORM DÙNG DESIGNER
+   - Thêm Designer cho các form còn lại: frmBaoCao, frmNhapHang, frmThanhToan, frmDashboard (5 thẻ + 4 Chart đặt
+     sẵn), frmBieuDo, frmDanhMuc (khung + nút; ô nhập vẫn sinh theo cấu hình danh mục), frmQuanLyThuoc,
+     frmChonCongDung, frmDoiMatKhau, frmQuenMatKhau + 5 form mới. Không còn InitializeComponentCustom nào.
+   - Tên control theo quy ước btn/txt/lbl/cbo/nud/dgv/chk/dtp/pnl/grp/col, sự kiện là hàm có tên (btnLuu_Click...).
+
+B. MẬT KHẨU BĂM SHA-256 + SALT
+   - CSDL: bỏ cột NhanVien.MatKhau, thêm MatKhauHash, MatKhauSalt, PhaiDoiMK. Mật khẩu cũ được băm trước khi xóa cột.
+   - BLL/BaoMatMatKhau.cs: Hash = SHA256(UTF-16(Salt + MK)), salt 16 byte ngẫu nhiên - giống hệt HASHBYTES của SQL.
+   - Quản lý KHÔNG xem được mật khẩu, chỉ đặt lại (ô "Mật khẩu mới", để trống = giữ). Dòng vàng "quên mật khẩu" giữ nguyên.
+   - NV mới / vừa được đặt lại mật khẩu phải đổi mật khẩu khi đăng nhập (form Đổi mật khẩu chế độ bắt buộc).
+
+C. QUẢN LÝ THEO LÔ - FEFO
+   - Bảng LoThuoc, ChiTietHDB_Lo. Nhập hàng (tay + Excel) tạo lô: số lô, NSX, HSD (Excel thêm cột SoLo).
+   - Bán: sp_XuatKhoFEFO lấy lô hết hạn trước, bỏ lô đã hết hạn. Chỉ bán "SL bán được" (lô còn hạn).
+   - Thuoc.SLHienCo / HanSD tự đồng bộ theo lô -> báo cáo Y/C 6 và cảnh báo không phải sửa.
+   - "Hủy thuốc hết hạn" -> "Hủy lô thuốc hết hạn" (lô còn hạn của cùng thuốc vẫn bán).
+   - Trang "Lô thuốc (FEFO)" + nút "Xem các lô" ở Tra cứu và Danh mục thuốc.
+
+D. TÍNH NĂNG THỰC TẾ
+   - Thuốc kê đơn (℞): cờ ở Danh mục thuốc; bán phải nhập mã đơn thuốc (lưu HoaDonBan.MaDonThuoc).
+   - Trả hàng / hủy hóa đơn (frmTraHang): trả 1 phần hoặc hủy cả HĐ (chỉ quản lý), hàng về đúng lô,
+     trừ / hoàn điểm, báo cáo bỏ HĐ đã hủy. Bán hàng chỉ nhận trả trong 30 ngày.
+   - Nhật ký hoạt động (frmNhatKy): đăng nhập (đúng/sai), đăng xuất, đổi/đặt lại MK, NV, thuốc, thanh toán,
+     trả hàng, nhập hàng, hủy thuốc, sao lưu. Đổi giá thuốc do TRIGGER trg_Thuoc_NhatKyGia ghi (biết ai sửa nhờ
+     CONTEXT_INFO). Lọc theo ngày / NV / hành động, xuất Excel.
+   - Sao lưu / khôi phục CSDL (frmSaoLuu): BACKUP / RESTORE, lịch sử sao lưu từ msdb.
+   - Cấu hình kết nối (frmCauHinhKetNoi): tự dò .\SQLEXPRESS, ., (localdb)\MSSQLLocalDB; không được thì hiện form.
+     Lưu ở %AppData%\QuanLyNhaThuoc\ketnoi.cfg (mật khẩu SQL mã hóa DPAPI). DBConnection.cs KHÔNG còn chuỗi riêng
+     của từng máy -> đưa lên GitHub bình thường. Link "⚙ Cấu hình kết nối CSDL" ở màn hình đăng nhập.
+
+E. DỮ LIỆU DEMO: file DuLieuDemo.sql (chạy SAU file CSDL, 1 lần): 50 thuốc TH101-TH150, 40 khách, 4 NV mới,
+   12 tháng: ~24 phiếu nhập (lô), ~200 hóa đơn bán FEFO, 1 lần tăng giá, 2 phiếu trả + 1 HĐ hủy, nhật ký.
+
+F. FILE
+   Mới: DuLieuDemo.sql; BLL: BaoMatMatKhau, KetNoiBLL, NhatKyBLL, SaoLuuBLL, TraHangBLL;
+        DAL: CauHinhKetNoi, NhatKyDAO, SaoLuuDAO, TraHangDAO; DTO: TraHangDTO;
+        GUI: frmCauHinhKetNoi, frmLoThuoc, frmNhatKy, frmSaoLuu, frmTraHang (+ .Designer.cs);
+        .Designer.cs mới cho frmBieuDo, frmChonCongDung, frmDanhMuc, frmDashboard, frmDoiMatKhau, frmQuanLyThuoc, frmQuenMatKhau.
+   Sửa: CSDL_QuanLyNhaThuoc.sql (lần 5), Program.cs, QuanLyNhaThuoc.csproj (+ System.Security), DBConnection.cs,
+        SqlHelper, NhanVienDAO/BLL, ThuocDAO/BLL, HoaDonBanDAO/BLL, HoaDonNhapDAO/BLL, PhieuNhapExcel, BaoCaoBLL,
+        DongPhieuNhap, HoaDonTam, NhanVienDTO, PhienDangNhap, ThuocDTO và các form ở mục A.
+   Mọi chỗ sửa đều có ghi chú "[10/11/2026 lần 5]".

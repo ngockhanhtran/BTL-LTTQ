@@ -11,6 +11,7 @@ namespace QuanLyNhaThuoc.DTO
         public string TenThuoc { get; set; }
         public int SoLuong { get; set; }
         public decimal GiaBan { get; set; }
+        public bool KeDon { get; set; }              // [10/11/2026 lần 5] thuốc kê đơn
         public decimal ThanhTien => SoLuong * GiaBan;
     }
 
@@ -34,6 +35,12 @@ namespace QuanLyNhaThuoc.DTO
 
         public string MaHDB { get; private set; }
         public List<DongHoaDon> Dong { get; } = new List<DongHoaDon>();
+
+        /// <summary>[10/11/2026 lần 5] Mã đơn thuốc của bác sĩ (bắt buộc khi có thuốc kê đơn).</summary>
+        public string MaDonThuoc { get; set; }
+
+        /// <summary>[10/11/2026 lần 5] Hóa đơn có thuốc kê đơn.</summary>
+        public bool CoThuocKeDon => Dong.Any(d => d.KeDon);
 
         //Giảm giá theo % trên toàn hóa đơn (0 - 100)
         public decimal GiamGiaPhanTram
@@ -96,13 +103,16 @@ namespace QuanLyNhaThuoc.DTO
         public int SoLuongCua(string maThuoc) => Dong.Where(d => d.MaThuoc == maThuoc).Sum(d => d.SoLuong);
 
         //Thêm thuốc; nếu thuốc đã có trong hóa đơn thì cộng dồn số lượng
-        public void ThemThuoc(string maThuoc, string tenThuoc, int soLuong, decimal giaBan)
+        public void ThemThuoc(string maThuoc, string tenThuoc, int soLuong, decimal giaBan, bool keDon = false)
         {
             DongHoaDon dong = Dong.FirstOrDefault(d => d.MaThuoc == maThuoc);
             if (dong != null)
+            {
                 dong.SoLuong += soLuong;
+                dong.KeDon = dong.KeDon || keDon;
+            }
             else
-                Dong.Add(new DongHoaDon { MaThuoc = maThuoc, TenThuoc = tenThuoc, SoLuong = soLuong, GiaBan = giaBan });
+                Dong.Add(new DongHoaDon { MaThuoc = maThuoc, TenThuoc = tenThuoc, SoLuong = soLuong, GiaBan = giaBan, KeDon = keDon });
         }
 
         public void XoaThuoc(string maThuoc)

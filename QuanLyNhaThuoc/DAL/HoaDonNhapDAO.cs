@@ -30,6 +30,7 @@ namespace QuanLyNhaThuoc.DAL
         }
 
         // THÊM CHI TIẾT HĐN + TỰ ĐỘNG TĂNG TỒN KHO + CẬP NHẬT GIÁ NHẬP + GIÁ BÁN = 110% X GIÁ NHẬP
+        // [10/11/2026 lần 5] Hàm cũ không tạo LÔ -> không dùng nữa, thay bằng NhapHangThuCong / ImportPhieuNhap.
         public bool ThemChiTietHDN(string maHDN, string maThuoc, int slNhap, decimal donGia, decimal khuyenMai, decimal thanhTien)
         {
             using (SqlConnection conn = db.GetConnection())
@@ -156,8 +157,10 @@ namespace QuanLyNhaThuoc.DAL
         //  - Tăng tồn kho, cập nhật giá nhập, giá bán = 110% giá nhập
         //  - Tự tính lại TongTien của phiếu = SUM(ThanhTien)
         // =====================================================================
+        // [10/11/2026 lần 5] thêm soLo, ngaySX, hanSD: mỗi lần nhập tạo 1 LÔ thuốc
         public bool NhapHangThuCong(string maHDN, string maNV, string maNCC, string maThuoc,
-                                    int slNhap, decimal donGia, decimal khuyenMai, out bool taoPhieuMoi)
+                                    int slNhap, decimal donGia, decimal khuyenMai,
+                                    string soLo, DateTime? ngaySX, DateTime? hanSD, out bool taoPhieuMoi)
         {
             taoPhieuMoi = false;
             using (SqlConnection conn = db.GetConnection())
@@ -205,8 +208,8 @@ namespace QuanLyNhaThuoc.DAL
                     if (daCo != null)
                         throw new InvalidOperationException("Thuốc " + maThuoc + " đã có trong phiếu " + maHDN + ".");
 
-                    // 3. Thêm chi tiết + tăng tồn kho + cập nhật giá
-                    ThemChiTietVaCapNhatKho(conn, tx, maHDN, maThuoc, slNhap, donGia, khuyenMai);
+                    // 3. Thêm chi tiết + tạo lô (tăng tồn kho) + cập nhật giá
+                    ThemChiTietVaCapNhatKho(conn, tx, maHDN, maThuoc, slNhap, donGia, khuyenMai, soLo, ngaySX, hanSD, DateTime.Now);
 
                     // 4. Tính lại tổng tiền phiếu
                     CapNhatTongTienPhieu(conn, tx, maHDN);
@@ -300,7 +303,8 @@ namespace QuanLyNhaThuoc.DAL
                                 if (maCD != null) ThuocDAO.ThemCongDungChoThuoc(conn, tx, d.MaThuoc, maCD);
                             }
 
-                            ThemChiTietVaCapNhatKho(conn, tx, d.MaHDN, d.MaThuoc, d.SLNhap, d.DonGia, d.KhuyenMai);
+                            ThemChiTietVaCapNhatKho(conn, tx, d.MaHDN, d.MaThuoc, d.SLNhap, d.DonGia, d.KhuyenMai,
+                                                    d.SoLo, d.NgaySX, d.HanSD, ngayNhap);   // [10/11/2026 lần 5] lô
                         }
 
                         CapNhatTongTienPhieu(conn, tx, dau.MaHDN);
@@ -322,8 +326,11 @@ namespace QuanLyNhaThuoc.DAL
         //  HÀM DÙNG CHUNG (trong transaction)
         // =====================================================================
 
+        // [10/11/2026 lần 5] Tồn kho tăng qua LÔ (sp_NhapLo), không cộng thẳng vào Thuoc.SLHienCo nữa.
+        //   hanSD null: thuốc đã có -> lấy hạn hiện tại nếu còn > 30 ngày, không thì 2 năm kể từ hôm nay.
         private static void ThemChiTietVaCapNhatKho(SqlConnection conn, SqlTransaction tx, string maHDN, string maThuoc,
-                                                    int slNhap, decimal donGia, decimal khuyenMai)
+                                                    int slNhap, decimal donGia, decimal khuyenMai,
+                                                    string soLo, DateTime? ngaySX, DateTime? hanSD, DateTime ngayNhap)
         {
             decimal thanhTien = slNhap * donGia - khuyenMai;
             if (thanhTien < 0) thanhTien = 0;
@@ -333,17 +340,38 @@ namespace QuanLyNhaThuoc.DAL
                 ThamSo("@MaHDN", maHDN), ThamSo("@MaThuoc", maThuoc), ThamSo("@SLNhap", slNhap),
                 ThamSo("@DonGia", donGia), ThamSo("@KhuyenMai", khuyenMai), ThamSo("@ThanhTien", thanhTien));
 
+            object hanCu = LayGiaTriTx(conn, tx, "SELECT HanSD FROM Thuoc WHERE MaThuoc = @Ma", ThamSo("@Ma", maThuoc));
             int soDong = ThucThi(conn, tx,
                 @"UPDATE Thuoc
-                  SET SLHienCo = SLHienCo + @SLNhap,
-                      DonGiaNhap = @DonGia,
+                  SET DonGiaNhap = @DonGia,
                       GiaBan = @GiaBan
                   WHERE MaThuoc = @MaThuoc",
-                ThamSo("@SLNhap", slNhap), ThamSo("@DonGia", donGia),
+                ThamSo("@DonGia", donGia),
                 ThamSo("@GiaBan", Math.Round(donGia * 1.1m, 2)), ThamSo("@MaThuoc", maThuoc));
 
             if (soDong == 0)
                 throw new InvalidOperationException("Không tìm thấy thuốc " + maThuoc + " trong CSDL.");
+
+            if (!hanSD.HasValue)
+            {
+                DateTime? cu = hanCu == null ? (DateTime?)null : Convert.ToDateTime(hanCu);
+                hanSD = cu.HasValue && cu.Value.Date > DateTime.Today.AddDays(30) ? cu.Value.Date : DateTime.Today.AddYears(2);
+            }
+            if (hanSD.Value.Date < DateTime.Today)
+                throw new InvalidOperationException("Lô thuốc " + maThuoc + " có hạn sử dụng " + hanSD.Value.ToString("dd/MM/yyyy") + " đã qua.");
+
+            using (SqlCommand cmd = new SqlCommand("sp_NhapLo", conn, tx) { CommandType = CommandType.StoredProcedure })
+            {
+                cmd.Parameters.Add(ThamSo("@MaThuoc", maThuoc));
+                cmd.Parameters.Add(ThamSo("@SoLo", soLo));
+                cmd.Parameters.Add(ThamSo("@NgaySX", ngaySX.HasValue ? (object)ngaySX.Value.Date : null));
+                cmd.Parameters.Add(ThamSo("@HanSD", hanSD.Value.Date));
+                cmd.Parameters.Add(ThamSo("@SoLuong", slNhap));
+                cmd.Parameters.Add(ThamSo("@DonGiaNhap", donGia));
+                cmd.Parameters.Add(ThamSo("@MaHDN", maHDN));
+                cmd.Parameters.Add(ThamSo("@NgayNhap", ngayNhap));
+                cmd.ExecuteNonQuery();
+            }
         }
 
         private static void CapNhatTongTienPhieu(SqlConnection conn, SqlTransaction tx, string maHDN)

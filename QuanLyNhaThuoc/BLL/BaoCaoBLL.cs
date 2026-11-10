@@ -83,7 +83,12 @@ namespace QuanLyNhaThuoc.BLL
         public DataTable HuyThuocHetHan(string maNV = null, string lyDo = "Hết hạn sử dụng")
         {
             if (maNV != null && maNV.Trim().Length == 0) maNV = null;
-            return baoCaoDAO.HuyThuocHetHan(maNV, lyDo);
+            DataTable kq = baoCaoDAO.HuyThuocHetHan(maNV, lyDo);
+            // [10/11/2026 lần 5] hủy theo LÔ hết hạn + ghi nhật ký
+            if (kq.Rows.Count > 0)
+                NhatKyBLL.Ghi(NhatKyBLL.HUY_THUOC, null, "Hủy lô hết hạn của " + kq.Rows[0]["SoThuocHuy"] + " thuốc, tổng SL " +
+                              kq.Rows[0]["TongSLHuy"] + ", giá trị " + Convert.ToDecimal(kq.Rows[0]["TongGiaTriHuy"]).ToString("N0") + " đ");
+            return kq;
         }
 
         // ================== [10/11/2026] DASHBOARD / BIỂU ĐỒ ==================

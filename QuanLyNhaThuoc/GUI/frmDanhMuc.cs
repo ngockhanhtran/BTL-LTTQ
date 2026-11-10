@@ -14,25 +14,30 @@ namespace QuanLyNhaThuoc.GUI
     /// Đơn vị tính, Dạng điều chế, Nước sản xuất). Ô nhập được tạo tự động theo CauHinhDanhMuc
     /// (DTO/DanhMucCauHinh.cs) -> muốn thêm danh mục mới chỉ cần khai báo cấu hình.
     /// </summary>
-    public class frmDanhMuc : Form
+    /// [10/11/2026 lần 5] Khung giao diện thiết kế bằng Designer (frmDanhMuc.Designer.cs): thanh tìm kiếm, lưới, nút.
+    /// Riêng các ô nhập liệu vẫn sinh lúc chạy vào pnlONhap vì mỗi danh mục có số cột khác nhau.
+    public partial class frmDanhMuc : Form
     {
         private readonly CauHinhDanhMuc cauHinh;
         private readonly DanhMucBLL bll = new DanhMucBLL();
 
-        private DataGridView dgv;
-        private TextBox txtTimKiem;
-        private Label lblCheDo;
-        private Button btnThem, btnLuu, btnXoa;
         private readonly Dictionary<string, TextBox> oNhap = new Dictionary<string, TextBox>();
+        private readonly Dictionary<string, string> tieuDeCot;
+        private readonly List<string> cotSo;
         private bool dangThemMoi;
 
         public frmDanhMuc(CauHinhDanhMuc ch)
         {
             cauHinh = ch;
-            this.AutoScaleDimensions = new SizeF(96F, 96F);
-            this.AutoScaleMode = AutoScaleMode.Dpi;
+            InitializeComponent();
+            this.Dock = DockStyle.Fill;
             this.Text = ch.TieuDe;
-            InitializeComponentCustom();
+            lblTieuDeKhung.Text = ch.TieuDe;
+            foreach (Button b in new[] { btnTim, btnTatCa, btnThem, btnLuu, btnXoa, btnLamMoi }) b.Tag = b.BackColor;
+
+            tieuDeCot = cauHinh.Cot.ToDictionary(c => c.Ten, c => c.TieuDe);
+            cotSo = cauHinh.Cot.Where(c => c.LaSo).Select(c => c.Ten).ToList();
+            TaoONhap();
         }
 
         protected override void OnLoad(EventArgs e)
@@ -41,80 +46,46 @@ namespace QuanLyNhaThuoc.GUI
             TaiDanhSach(null);
         }
 
-        private void InitializeComponentCustom()
+        // Sinh nhãn + ô nhập theo cấu hình rồi dời hàng nút xuống dưới
+        private void TaoONhap()
         {
-            this.SuspendLayout();
-            this.BackColor = GiaoDien.MauNen;
-            this.Dock = DockStyle.Fill;
-
-            // ---------- Tìm kiếm ----------
-            Panel pnlTren = new Panel() { Dock = DockStyle.Top, Height = 56, BackColor = Color.White };
-            Label lblTim = new Label() { Text = "Tìm kiếm:", Left = 15, Top = 18, AutoSize = true, Font = GiaoDien.TaoFont(9.5F) };
-            txtTimKiem = new TextBox() { Left = 90, Top = 15, Width = 280, Font = GiaoDien.TaoFont(10F) };
-            txtTimKiem.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; TaiDanhSach(null); } };
-            Button btnTim = GiaoDien.TaoNut("Tìm", GiaoDien.MauXanh, 70, 30);
-            btnTim.Left = 380; btnTim.Top = 13;
-            btnTim.Click += (s, e) => TaiDanhSach(null);
-            Button btnTatCa = GiaoDien.TaoNut("Tất cả", GiaoDien.MauXam, 80, 30);
-            btnTatCa.Left = 458; btnTatCa.Top = 13;
-            btnTatCa.Click += (s, e) => { txtTimKiem.Clear(); TaiDanhSach(null); };
-            pnlTren.Controls.AddRange(new Control[] { lblTim, txtTimKiem, btnTim, btnTatCa });
-
-            // ---------- Lưới ----------
-            dgv = GiaoDien.TaoLuoi();
-            Dictionary<string, string> tieuDe = cauHinh.Cot.ToDictionary(c => c.Ten, c => c.TieuDe);
-            List<string> cotSo = cauHinh.Cot.Where(c => c.LaSo).Select(c => c.Ten).ToList();
-            dgv.DataBindingComplete += (s, e) => GiaoDien.DinhDangCot(dgv, tieuDe, null, cotSo, null);
-            dgv.SelectionChanged += (s, e) => { if (!dangThemMoi) HienThiDongDangChon(); };
-            Panel pnlLuoi = new Panel() { Dock = DockStyle.Fill, Padding = new Padding(0, 10, 10, 0) };
-            pnlLuoi.Controls.Add(dgv);
-
-            // ---------- Ô nhập liệu (tự sinh theo cấu hình) ----------
-            Panel pnlPhai = new Panel() { Dock = DockStyle.Right, Width = 380, BackColor = Color.White, AutoScroll = true };
-            int y = 15;
-            pnlPhai.Controls.Add(new Label() { Text = cauHinh.TieuDe, Left = 18, Top = y, Width = 345, Height = 26, Font = GiaoDien.TaoFont(12F, FontStyle.Bold) });
-            y += 28;
-            lblCheDo = new Label() { Left = 18, Top = y, Width = 345, Height = 20, Font = GiaoDien.TaoFont(9F, FontStyle.Italic), ForeColor = GiaoDien.MauXam };
-            pnlPhai.Controls.Add(lblCheDo);
-            y += 32;
-
+            int y = 0;
             foreach (CotDanhMuc c in cauHinh.Cot)
             {
-                pnlPhai.Controls.Add(GiaoDien.TaoNhan(c.TieuDe + (c.BatBuoc ? " (*)" : "") + ":", 18, y, 120));
+                pnlONhap.Controls.Add(GiaoDien.TaoNhan(c.TieuDe + (c.BatBuoc ? " (*)" : "") + ":", 18, y, 120));
                 bool dai = c.DoDaiToiDa > 100;
                 TextBox t = GiaoDien.TaoO(140, y, 220, c.ChiDoc);
                 if (dai) { t.Multiline = true; t.Height = 50; t.ScrollBars = ScrollBars.Vertical; }
                 if (c.DoDaiToiDa > 0 && !c.ChiDoc) t.MaxLength = c.DoDaiToiDa;
                 if (c == cauHinh.CotKhoa) t.CharacterCasing = CharacterCasing.Upper;
-                pnlPhai.Controls.Add(t);
+                pnlONhap.Controls.Add(t);
                 oNhap[c.Ten] = t;
                 y += dai ? 62 : 38;
             }
+            pnlONhap.Height = y;
+            pnlNut.Top = pnlONhap.Bottom + 10;
+        }
 
-            y += 10;
-            btnThem = GiaoDien.TaoNut("➕ Thêm mới", GiaoDien.MauXanh, 165, 38);
-            btnThem.Left = 18; btnThem.Top = y;
-            btnThem.Click += (s, e) => BatDauThemMoi();
-            btnLuu = GiaoDien.TaoNut("💾 Lưu", GiaoDien.MauXanhLa, 165, 38);
-            btnLuu.Left = 195; btnLuu.Top = y;
-            btnLuu.Click += (s, e) => Luu();
-            y += 46;
-            btnXoa = GiaoDien.TaoNut("🗑 Xóa", GiaoDien.MauDo, 165, 38);
-            btnXoa.Left = 18; btnXoa.Top = y;
-            btnXoa.Click += (s, e) => Xoa();
-            Button btnHuy = GiaoDien.TaoNut("↻ Làm mới", GiaoDien.MauXam, 165, 38);
-            btnHuy.Left = 195; btnHuy.Top = y;
-            btnHuy.Click += (s, e) => TaiDanhSach(null);
-            pnlPhai.Controls.AddRange(new Control[] { btnThem, btnLuu, btnXoa, btnHuy });
+        private void txtTimKiem_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; TaiDanhSach(null); }
+        }
 
-            Panel pnlGiua = new Panel() { Dock = DockStyle.Fill, Padding = new Padding(0, 10, 0, 0) };
-            pnlGiua.Controls.Add(pnlLuoi);
-            pnlGiua.Controls.Add(pnlPhai);
+        private void btnTim_Click(object sender, EventArgs e) { TaiDanhSach(null); }
+        private void btnTatCa_Click(object sender, EventArgs e) { txtTimKiem.Clear(); TaiDanhSach(null); }
+        private void btnThem_Click(object sender, EventArgs e) { BatDauThemMoi(); }
+        private void btnLuu_Click(object sender, EventArgs e) { Luu(); }
+        private void btnXoa_Click(object sender, EventArgs e) { Xoa(); }
+        private void btnLamMoi_Click(object sender, EventArgs e) { TaiDanhSach(null); }
 
-            this.Controls.Add(pnlGiua);
-            this.Controls.Add(pnlTren);
-            this.ResumeLayout(false);
-            this.PerformLayout();
+        private void dgv_DataBindingComplete(object sender, DataGridViewBindingCompleteEventArgs e)
+        {
+            GiaoDien.DinhDangCot(dgv, tieuDeCot, null, cotSo, null);
+        }
+
+        private void dgv_SelectionChanged(object sender, EventArgs e)
+        {
+            if (!dangThemMoi) HienThiDongDangChon();
         }
 
         private TextBox OKhoa { get { return oNhap[cauHinh.CotKhoa.Ten]; } }

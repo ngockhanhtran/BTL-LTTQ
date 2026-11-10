@@ -15,22 +15,20 @@ namespace QuanLyNhaThuoc.GUI
     ///   doanh thu NV theo quý (2 NV thấp nhất tô đỏ - so sánh với báo cáo Y/C 9),
     ///   5 hóa đơn thấp nhất so với phần còn lại (so sánh với báo cáo Y/C 8).
     /// </summary>
-    public class frmDashboard : Form
+    /// [10/11/2026 lần 5] Giao diện thiết kế bằng Designer (frmDashboard.Designer.cs): 5 thẻ số liệu + 4 Chart đặt sẵn,
+    /// code chỉ đổ số liệu vào.
+    public partial class frmDashboard : Form
     {
         private readonly BaoCaoBLL bcBLL = new BaoCaoBLL();
-
-        private NumericUpDown nudNam;
-        private ComboBox cboQuy;
-        private FlowLayoutPanel pnlThe;
-        private Chart chartThang, chartTopThuoc, chartNhanVien, chartHoaDon;
         private bool dangKhoiTao = true;
 
         public frmDashboard()
         {
-            this.AutoScaleDimensions = new SizeF(96F, 96F);
-            this.AutoScaleMode = AutoScaleMode.Dpi;
-            this.Text = "Dashboard tổng quan";
-            InitializeComponentCustom();
+            InitializeComponent();
+            this.Dock = DockStyle.Fill;
+            btnLamMoi.Tag = btnLamMoi.BackColor;
+            nudNam.Value = DateTime.Today.Year;
+            cboQuy.SelectedIndex = (DateTime.Today.Month - 1) / 3;
         }
 
         protected override void OnLoad(EventArgs e)
@@ -40,76 +38,15 @@ namespace QuanLyNhaThuoc.GUI
             TaiDuLieu();
         }
 
-        private void InitializeComponentCustom()
+        private void nudNam_ValueChanged(object sender, EventArgs e) { TaiDuLieu(); }
+        private void cboQuy_SelectedIndexChanged(object sender, EventArgs e) { TaiDuLieu(); }
+        private void btnLamMoi_Click(object sender, EventArgs e) { TaiDuLieu(); }
+
+        private static void DatThe(Label tieuDe, Label giaTri, Label phu, string a, string b, string c)
         {
-            this.SuspendLayout();
-            this.BackColor = GiaoDien.MauNen;
-            this.Dock = DockStyle.Fill;
-
-            // ---------- Bộ lọc ----------
-            Panel pnlLoc = new Panel() { Dock = DockStyle.Top, Height = 50, BackColor = Color.White };
-            Label lblNam = new Label() { Text = "Năm:", Left = 15, Top = 16, AutoSize = true, Font = GiaoDien.TaoFont(9.5F) };
-            nudNam = new NumericUpDown() { Left = 55, Top = 13, Width = 75, Minimum = 2000, Maximum = 2100, Value = DateTime.Today.Year, Font = GiaoDien.TaoFont(10F), TextAlign = HorizontalAlignment.Center };
-            nudNam.ValueChanged += (s, e) => TaiDuLieu();
-            Label lblQuy = new Label() { Text = "Quý (biểu đồ nhân viên):", Left = 150, Top = 16, AutoSize = true, Font = GiaoDien.TaoFont(9.5F) };
-            cboQuy = new ComboBox() { Left = 310, Top = 13, Width = 80, DropDownStyle = ComboBoxStyle.DropDownList, Font = GiaoDien.TaoFont(9.5F) };
-            cboQuy.Items.AddRange(new object[] { "Quý 1", "Quý 2", "Quý 3", "Quý 4" });
-            cboQuy.SelectedIndex = (DateTime.Today.Month - 1) / 3;
-            cboQuy.SelectedIndexChanged += (s, e) => TaiDuLieu();
-            Button btnLamMoi = GiaoDien.TaoNut("↻ Làm mới", GiaoDien.MauXanh, 110, 30);
-            btnLamMoi.Left = 410; btnLamMoi.Top = 10;
-            btnLamMoi.Click += (s, e) => TaiDuLieu();
-            pnlLoc.Controls.AddRange(new Control[] { lblNam, nudNam, lblQuy, cboQuy, btnLamMoi });
-
-            // ---------- Thẻ số liệu ----------
-            pnlThe = new FlowLayoutPanel()
-            {
-                Dock = DockStyle.Top,
-                Height = 104,
-                Padding = new Padding(10, 10, 10, 0),
-                WrapContents = false,
-                AutoScroll = true
-            };
-
-            // ---------- 4 biểu đồ (lưới 2 x 2) ----------
-            TableLayoutPanel tbl = new TableLayoutPanel() { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, Padding = new Padding(10) };
-            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-
-            chartThang = BieuDoHelper.TaoChart("Doanh thu & tiền nhập theo tháng");
-            chartTopThuoc = BieuDoHelper.TaoChart("Top 5 thuốc bán chạy");
-            chartNhanVien = BieuDoHelper.TaoChart("Doanh thu nhân viên theo quý");
-            chartHoaDon = BieuDoHelper.TaoChart("5 hóa đơn thấp nhất so với phần còn lại");
-            tbl.Controls.Add(BocKhung(chartThang), 0, 0);
-            tbl.Controls.Add(BocKhung(chartTopThuoc), 1, 0);
-            tbl.Controls.Add(BocKhung(chartNhanVien), 0, 1);
-            tbl.Controls.Add(BocKhung(chartHoaDon), 1, 1);
-
-            this.Controls.Add(tbl);
-            this.Controls.Add(pnlThe);
-            this.Controls.Add(pnlLoc);
-            this.ResumeLayout(false);
-            this.PerformLayout();
-        }
-
-        private static Panel BocKhung(Control c)
-        {
-            Panel p = new Panel() { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(6), Margin = new Padding(5) };
-            p.Controls.Add(c);
-            return p;
-        }
-
-        private Panel TaoThe(string tieuDe, string giaTri, string phu, Color mau)
-        {
-            Panel p = new Panel() { Width = 205, Height = 84, BackColor = Color.White, Margin = new Padding(5, 0, 5, 0) };
-            Panel vach = new Panel() { Dock = DockStyle.Left, Width = 5, BackColor = mau };
-            Label lblTieuDe = new Label() { Text = tieuDe, Left = 15, Top = 8, Width = 185, Height = 18, Font = GiaoDien.TaoFont(9F), ForeColor = Color.DimGray };
-            Label lblGiaTri = new Label() { Text = giaTri, Left = 13, Top = 26, Width = 190, Height = 32, Font = GiaoDien.TaoFont(16F, FontStyle.Bold), ForeColor = mau, AutoEllipsis = true };
-            Label lblPhu = new Label() { Text = phu, Left = 15, Top = 60, Width = 185, Height = 18, Font = GiaoDien.TaoFont(8.5F, FontStyle.Italic), ForeColor = Color.Gray };
-            p.Controls.AddRange(new Control[] { vach, lblTieuDe, lblGiaTri, lblPhu });
-            return p;
+            tieuDe.Text = a;
+            giaTri.Text = b;
+            phu.Text = c;
         }
 
         private static string Tien(object v)
@@ -129,20 +66,15 @@ namespace QuanLyNhaThuoc.GUI
 
                 // Thẻ số liệu
                 DataTable tq = bcBLL.DashboardTongQuan();
-                pnlThe.SuspendLayout();
-                Control[] theCu = pnlThe.Controls.Cast<Control>().ToArray();
-                pnlThe.Controls.Clear();
-                foreach (Control c in theCu) c.Dispose();
                 if (tq.Rows.Count > 0)
                 {
                     DataRow r = tq.Rows[0];
-                    pnlThe.Controls.Add(TaoThe("Doanh thu hôm nay", Tien(r["DoanhThuHomNay"]), r["SoHoaDonHomNay"] + " hóa đơn", GiaoDien.MauXanh));
-                    pnlThe.Controls.Add(TaoThe("Doanh thu tháng " + DateTime.Today.Month, Tien(r["DoanhThuThangNay"]), r["SoHoaDonThangNay"] + " hóa đơn", GiaoDien.MauXanhLa));
-                    pnlThe.Controls.Add(TaoThe("Tiền nhập tháng " + DateTime.Today.Month, Tien(r["TienNhapThangNay"]), "theo phiếu nhập", GiaoDien.MauCam));
-                    pnlThe.Controls.Add(TaoThe("Khách hàng", Convert.ToInt32(r["SoKhachHang"]).ToString("N0"), "đang tích điểm", Color.FromArgb(111, 66, 193)));
-                    pnlThe.Controls.Add(TaoThe("Thuốc cần chú ý", Convert.ToInt32(r["SoThuocCanhBao"]).ToString("N0"), "sắp hết hàng / cận hạn", GiaoDien.MauDo));
+                    DatThe(lblTheTieuDe1, lblTheGiaTri1, lblThePhu1, "Doanh thu hôm nay", Tien(r["DoanhThuHomNay"]), r["SoHoaDonHomNay"] + " hóa đơn");
+                    DatThe(lblTheTieuDe2, lblTheGiaTri2, lblThePhu2, "Doanh thu tháng " + DateTime.Today.Month, Tien(r["DoanhThuThangNay"]), r["SoHoaDonThangNay"] + " hóa đơn");
+                    DatThe(lblTheTieuDe3, lblTheGiaTri3, lblThePhu3, "Tiền nhập tháng " + DateTime.Today.Month, Tien(r["TienNhapThangNay"]), "theo phiếu nhập");
+                    DatThe(lblTheTieuDe4, lblTheGiaTri4, lblThePhu4, "Khách hàng", Convert.ToInt32(r["SoKhachHang"]).ToString("N0"), "đang tích điểm");
+                    DatThe(lblTheTieuDe5, lblTheGiaTri5, lblThePhu5, "Thuốc cần chú ý", Convert.ToInt32(r["SoThuocCanhBao"]).ToString("N0"), "sắp hết hàng / cận hạn");
                 }
-                pnlThe.ResumeLayout();
 
                 // Biểu đồ
                 chartThang.Titles[0].Text = "Doanh thu & tiền nhập theo tháng – năm " + nam;

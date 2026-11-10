@@ -79,7 +79,8 @@ namespace QuanLyNhaThuoc.DAL
         public QuanLyNhaThuoc.DTO.ThuocBan TimThuocBan(string ma)
         {
             DataTable dt = SqlHelper.Query(@"
-                SELECT TOP 1 MaThuoc, TenThuoc, MaVach, GiaBan, SLHienCo, HanSD
+                SELECT TOP 1 MaThuoc, TenThuoc, MaVach, GiaBan, SLHienCo, HanSD, KeDon,
+                       dbo.fn_SLBanDuoc(MaThuoc, CAST(GETDATE() AS DATE)) AS SLBanDuoc   -- [10/11/2026 lần 5]
                 FROM Thuoc
                 WHERE MaVach = @Ma OR MaThuoc = @Ma
                 ORDER BY CASE WHEN MaVach = @Ma THEN 0 ELSE 1 END",
@@ -93,8 +94,43 @@ namespace QuanLyNhaThuoc.DAL
                 MaVach = r["MaVach"] == DBNull.Value ? null : r["MaVach"].ToString(),
                 GiaBan = r["GiaBan"] == DBNull.Value ? 0 : Convert.ToDecimal(r["GiaBan"]),
                 SLHienCo = r["SLHienCo"] == DBNull.Value ? 0 : Convert.ToInt32(r["SLHienCo"]),
-                HanSD = r["HanSD"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["HanSD"])
+                HanSD = r["HanSD"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["HanSD"]),
+                SLBanDuoc = r["SLBanDuoc"] == DBNull.Value ? 0 : Convert.ToInt32(r["SLBanDuoc"]),
+                KeDon = r["KeDon"] != DBNull.Value && Convert.ToBoolean(r["KeDon"])
             };
+        }
+
+        // =====================================================================
+        //  [10/11/2026 lần 5] LÔ THUỐC, KÊ ĐƠN
+        // =====================================================================
+
+        /// <summary>Các lô của 1 thuốc (maThuoc null = tất cả lô), sắp theo thứ tự bán FEFO.</summary>
+        public DataTable LayLoThuoc(string maThuoc, bool chiConHang)
+        {
+            return SqlHelper.QueryProc("sp_DanhSachLoThuoc",
+                SqlHelper.P("@MaThuoc", maThuoc),
+                SqlHelper.P("@ChiConHang", chiConHang),
+                SqlHelper.P("@SoNgayCanhBao", 30));
+        }
+
+        /// <summary>Trong các mã thuốc, trả về những thuốc kê đơn (MaThuoc -> TenThuoc).</summary>
+        public Dictionary<string, string> LayThuocKeDon(IEnumerable<string> dsMaThuoc)
+        {
+            Dictionary<string, string> kq = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            List<string> ds = (dsMaThuoc ?? Enumerable.Empty<string>()).Where(m => !string.IsNullOrWhiteSpace(m))
+                                                                     .Select(m => m.Trim()).Distinct().ToList();
+            if (ds.Count == 0) return kq;
+            List<SqlParameter> ps = new List<SqlParameter>();
+            List<string> ten = new List<string>();
+            for (int i = 0; i < ds.Count; i++)
+            {
+                ten.Add("@M" + i);
+                ps.Add(SqlHelper.PChuoi("@M" + i, ds[i]));
+            }
+            DataTable dt = SqlHelper.Query("SELECT MaThuoc, TenThuoc FROM Thuoc WHERE KeDon = 1 AND MaThuoc IN (" +
+                                           string.Join(", ", ten) + ")", ps.ToArray());
+            foreach (DataRow r in dt.Rows) kq[r["MaThuoc"].ToString().Trim()] = r["TenThuoc"].ToString();
+            return kq;
         }
 
         /// <summary>Mã thuốc đang dùng mã vạch này (null nếu chưa ai dùng).</summary>
@@ -120,7 +156,10 @@ namespace QuanLyNhaThuoc.DAL
         {
             return SqlHelper.Query(@"
                 SELECT t.MaThuoc, t.TenThuoc, t.MaVach, t.MaDVT, dvt.TenDVT, t.MaDangDC, dc.TenDangDC,
-                       t.ThanhPhan, t.DonGiaNhap, t.GiaBan, t.SLHienCo, t.NgaySX, t.HanSD,
+                       t.ThanhPhan, t.DonGiaNhap, t.GiaBan, t.SLHienCo,
+                       dbo.fn_SLBanDuoc(t.MaThuoc, CAST(GETDATE() AS DATE)) AS SLBanDuoc,
+                       (SELECT COUNT(*) FROM LoThuoc l WHERE l.MaThuoc = t.MaThuoc AND l.SLCon > 0) AS SoLo,
+                       t.NgaySX, t.HanSD, t.KeDon,
                        t.MaNuocSX, nsx.TenNuocSX, t.ChongChiDinh,
                        STUFF((SELECT N', ' + cd.TenCongDung
                               FROM Thuoc_CongDung tcd JOIN CongDung cd ON cd.MaCongDung = tcd.MaCongDung
@@ -204,9 +243,9 @@ namespace QuanLyNhaThuoc.DAL
                 {
                     SqlHelper.NonQuery(conn, tx, @"
                         INSERT INTO Thuoc (MaThuoc, TenThuoc, MaVach, MaDVT, MaDangDC, ThanhPhan, DonGiaNhap, GiaBan,
-                                           SLHienCo, NgaySX, MaNuocSX, HanSD, ChongChiDinh)
+                                           SLHienCo, NgaySX, MaNuocSX, HanSD, ChongChiDinh, KeDon)
                         VALUES (@MaThuoc, @TenThuoc, @MaVach, @MaDVT, @MaDangDC, @ThanhPhan, @DonGiaNhap, @GiaBan,
-                                0, @NgaySX, @MaNuocSX, @HanSD, @ChongChiDinh)",
+                                0, @NgaySX, @MaNuocSX, @HanSD, @ChongChiDinh, @KeDon)",
                         ThamSoThuoc(t));
                     DatCongDung(conn, tx, t.MaThuoc, t.CongDung);
                     tx.Commit();
@@ -231,7 +270,10 @@ namespace QuanLyNhaThuoc.DAL
                         UPDATE Thuoc
                         SET TenThuoc = @TenThuoc, MaVach = @MaVach, MaDVT = @MaDVT, MaDangDC = @MaDangDC,
                             ThanhPhan = @ThanhPhan, DonGiaNhap = @DonGiaNhap, GiaBan = @GiaBan,
-                            NgaySX = @NgaySX, MaNuocSX = @MaNuocSX, HanSD = @HanSD, ChongChiDinh = @ChongChiDinh
+                            MaNuocSX = @MaNuocSX, ChongChiDinh = @ChongChiDinh, KeDon = @KeDon,
+                            -- [10/11/2026 lần 5] thuốc đã có lô: NSX / HSD lấy theo lô, không sửa tay
+                            NgaySX = CASE WHEN EXISTS (SELECT 1 FROM LoThuoc WHERE MaThuoc = @MaThuoc) THEN NgaySX ELSE @NgaySX END,
+                            HanSD  = CASE WHEN EXISTS (SELECT 1 FROM LoThuoc WHERE MaThuoc = @MaThuoc) THEN HanSD  ELSE @HanSD  END
                         WHERE MaThuoc = @MaThuoc",
                         ThamSoThuoc(t));
                     DatCongDung(conn, tx, t.MaThuoc, t.CongDung);
@@ -254,6 +296,8 @@ namespace QuanLyNhaThuoc.DAL
                 try
                 {
                     SqlHelper.NonQuery(conn, tx, "DELETE FROM Thuoc_CongDung WHERE MaThuoc = @Ma", SqlHelper.PChuoi("@Ma", maThuoc));
+                    // [10/11/2026 lần 5] lô đã hết hàng của thuốc chưa từng bán thì xóa theo; lô đã bán -> lỗi 547 (giữ lịch sử)
+                    SqlHelper.NonQuery(conn, tx, "DELETE FROM LoThuoc WHERE MaThuoc = @Ma AND SLCon = 0 AND NOT EXISTS (SELECT 1 FROM ChiTietHDB_Lo x WHERE x.MaLo = LoThuoc.MaLo)", SqlHelper.PChuoi("@Ma", maThuoc));
                     SqlHelper.NonQuery(conn, tx, "DELETE FROM Thuoc WHERE MaThuoc = @Ma", SqlHelper.PChuoi("@Ma", maThuoc));
                     tx.Commit();
                 }
@@ -338,7 +382,8 @@ namespace QuanLyNhaThuoc.DAL
                 SqlHelper.P("@NgaySX", t.NgaySX),
                 SqlHelper.P("@MaNuocSX", t.MaNuocSX),
                 SqlHelper.P("@HanSD", t.HanSD),
-                SqlHelper.P("@ChongChiDinh", t.ChongChiDinh)
+                SqlHelper.P("@ChongChiDinh", t.ChongChiDinh),
+                SqlHelper.P("@KeDon", t.KeDon)
             };
         }
     }

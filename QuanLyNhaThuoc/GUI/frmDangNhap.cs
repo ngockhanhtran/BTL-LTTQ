@@ -10,16 +10,13 @@ namespace QuanLyNhaThuoc.GUI
 {
     /// <summary>
     /// [10/11/2026] Form đăng nhập: mã nhân viên + mật khẩu + "Quên mật khẩu?".
-    /// Thiết kế không viền: nửa trái gradient thương hiệu, nửa phải ô nhập liệu.
+    /// Giao diện thiết kế bằng Designer (frmDangNhap.Designer.cs) - mở được bằng kéo thả.
+    /// Nền gradient, viền ô nhập, bóng đổ, bo góc được vẽ khi CHẠY (Designer không hiển thị các hiệu ứng này).
     /// Kéo form bằng cách giữ chuột ở vùng trống. Enter = đăng nhập, Esc = thoát.
     /// </summary>
-    public class frmDangNhap : Form
+    public partial class frmDangNhap : Form
     {
         private readonly NhanVienBLL nvBLL = new NhanVienBLL();
-
-        private TextBox txtMaNV, txtMatKhau;
-        private Label lblLoi;
-        private Button btnDangNhap, btnDong, btnHienMK;
 
         private static readonly Color MAU_VIEN = Color.FromArgb(206, 212, 218);
         private static readonly Color MAU_O_NHAP = Color.FromArgb(248, 249, 250);
@@ -33,17 +30,7 @@ namespace QuanLyNhaThuoc.GUI
 
         public frmDangNhap()
         {
-            this.AutoScaleDimensions = new SizeF(96F, 96F);
-            this.AutoScaleMode = AutoScaleMode.Dpi;
-
-            this.Text = "Đăng nhập - Nhà thuốc 1";
-            this.FormBorderStyle = FormBorderStyle.None;
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.ClientSize = new Size(820, 480);
-            this.BackColor = Color.White;
-            this.KeyPreview = true;
-
-            InitializeComponentCustom();
+            InitializeComponent();
         }
 
         // Bóng đổ quanh form không viền
@@ -76,298 +63,113 @@ namespace QuanLyNhaThuoc.GUI
             txtMaNV.Focus();
         }
 
-        private void InitializeComponentCustom()
+        // ================== VẼ GIAO DIỆN (chỉ thấy khi chạy) ==================
+
+        // Nền gradient + vòng tròn trang trí cho nửa trái
+        private void pnlTrai_Paint(object sender, PaintEventArgs e)
         {
-            this.SuspendLayout();
-
-            // ================= NỬA TRÁI: THƯƠNG HIỆU =================
-            Panel pnlTrai = new Panel() { Dock = DockStyle.Left, Width = 360 };
-            pnlTrai.Paint += (s, e) =>
+            Rectangle r = pnlTrai.ClientRectangle;
+            if (r.Width <= 0 || r.Height <= 0) return;
+            using (LinearGradientBrush br = new LinearGradientBrush(r, Color.FromArgb(0, 122, 204), Color.FromArgb(0, 168, 150), 55F))
+                e.Graphics.FillRectangle(br, r);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using (SolidBrush b = new SolidBrush(Color.FromArgb(28, Color.White)))
             {
-                Rectangle r = pnlTrai.ClientRectangle;
-                if (r.Width <= 0 || r.Height <= 0) return;
-                using (LinearGradientBrush br = new LinearGradientBrush(r, Color.FromArgb(0, 122, 204), Color.FromArgb(0, 168, 150), 55F))
-                    e.Graphics.FillRectangle(br, r);
-                // vài vòng tròn trang trí
-                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(28, Color.White)))
-                {
-                    e.Graphics.FillEllipse(b, r.Width - 150, -70, 240, 240);
-                    e.Graphics.FillEllipse(b, -90, r.Height - 160, 220, 220);
-                }
-            };
-            pnlTrai.MouseDown += KeoForm;
-
-            Label lblIcon = new Label()
-            {
-                Text = "💊",
-                Font = new Font("Segoe UI Emoji", 40F),
-                ForeColor = Color.White,
-                BackColor = Color.Transparent,
-                AutoSize = true,
-                Left = 40,
-                Top = 70
-            };
-            Label lblTenCH = new Label()
-            {
-                Text = "NHÀ THUỐC 1",
-                Font = new Font("Segoe UI", 22F, FontStyle.Bold),
-                ForeColor = Color.White,
-                BackColor = Color.Transparent,
-                AutoSize = true,
-                Left = 40,
-                Top = 160
-            };
-            Label lblMoTa = new Label()
-            {
-                Text = "Hệ thống quản lý cửa hàng bán thuốc tây",
-                Font = new Font("Segoe UI", 11F),
-                ForeColor = Color.FromArgb(230, 245, 255),
-                BackColor = Color.Transparent,
-                Left = 42,
-                Top = 205,
-                Width = 290,
-                Height = 50
-            };
-            Label lblTinhNang = new Label()
-            {
-                Text = "✓  Tra cứu & bán thuốc, quét mã vạch\n✓  Tích điểm khách hàng, in hóa đơn PDF\n✓  Quản lý kho, báo cáo & dashboard",
-                Font = new Font("Segoe UI", 10F),
-                ForeColor = Color.White,
-                BackColor = Color.Transparent,
-                Left = 42,
-                Top = 275,
-                Width = 300,
-                Height = 80
-            };
-            Label lblChanTrang = new Label()
-            {
-                Text = "© 2026  •  BTL Lập trình trực quan",
-                Font = new Font("Segoe UI", 8.5F),
-                ForeColor = Color.FromArgb(210, 235, 250),
-                BackColor = Color.Transparent,
-                AutoSize = true,
-                Left = 42,
-                Top = 440
-            };
-            foreach (Control c in new Control[] { lblIcon, lblTenCH, lblMoTa, lblTinhNang, lblChanTrang })
-            {
-                c.MouseDown += KeoForm;
-                pnlTrai.Controls.Add(c);
+                e.Graphics.FillEllipse(b, r.Width - 150, -70, 240, 240);
+                e.Graphics.FillEllipse(b, -90, r.Height - 160, 220, 220);
             }
-
-            // ================= NỬA PHẢI: ĐĂNG NHẬP =================
-            Panel pnlPhai = new Panel() { Dock = DockStyle.Fill, BackColor = Color.White };
-            pnlPhai.MouseDown += KeoForm;
-
-            btnDong = new Button()
-            {
-                Text = "✕",
-                Width = 44,
-                Height = 34,
-                Top = 6,
-                Left = 820 - 360 - 50,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 11F),
-                ForeColor = Color.Gray,
-                BackColor = Color.White,
-                TabStop = false,
-                Cursor = Cursors.Hand,
-                DialogResult = DialogResult.Cancel,
-                Anchor = AnchorStyles.Top | AnchorStyles.Right
-            };
-            btnDong.FlatAppearance.BorderSize = 0;
-            btnDong.FlatAppearance.MouseOverBackColor = Color.FromArgb(232, 17, 35);
-            btnDong.MouseEnter += (s, e) => btnDong.ForeColor = Color.White;
-            btnDong.MouseLeave += (s, e) => btnDong.ForeColor = Color.Gray;
-            btnDong.Click += (s, e) => Close();
-
-            Label lblTieuDe = new Label()
-            {
-                Text = "Đăng nhập",
-                Font = new Font("Segoe UI", 22F, FontStyle.Bold),
-                ForeColor = GiaoDien.MauChu,
-                AutoSize = true,
-                Left = 46,
-                Top = 52
-            };
-            Label lblPhu = new Label()
-            {
-                Text = "Chào mừng trở lại! Vui lòng đăng nhập để tiếp tục.",
-                Font = new Font("Segoe UI", 10F),
-                ForeColor = Color.Gray,
-                AutoSize = true,
-                Left = 50,
-                Top = 100
-            };
-
-            Label lblMa = TaoNhanO("Mã nhân viên", 145);
-            Panel pnlMa = TaoONhap("👤", 170, out txtMaNV);
-            txtMaNV.CharacterCasing = CharacterCasing.Upper;
-            txtMaNV.MaxLength = 10;
-
-            Label lblMk = TaoNhanO("Mật khẩu", 230);
-            Panel pnlMk = TaoONhap("🔒", 255, out txtMatKhau);
-            txtMatKhau.UseSystemPasswordChar = true;
-            txtMatKhau.MaxLength = 50;
-            txtMatKhau.Width = 262;
-
-            btnHienMK = new Button()
-            {
-                Text = "👁",
-                Font = new Font("Segoe UI Emoji", 10F),
-                Width = 40,
-                Height = 34,
-                Left = 315,
-                Top = 5,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = MAU_O_NHAP,
-                ForeColor = Color.Gray,
-                TabStop = false,
-                Cursor = Cursors.Hand
-            };
-            btnHienMK.FlatAppearance.BorderSize = 0;
-            btnHienMK.Click += (s, e) =>
-            {
-                txtMatKhau.UseSystemPasswordChar = !txtMatKhau.UseSystemPasswordChar;
-                btnHienMK.ForeColor = txtMatKhau.UseSystemPasswordChar ? Color.Gray : GiaoDien.MauXanh;
-                txtMatKhau.Focus();
-                txtMatKhau.SelectionStart = txtMatKhau.TextLength;
-            };
-            pnlMk.Controls.Add(btnHienMK);
-            btnHienMK.BringToFront();
-
-            lblLoi = new Label()
-            {
-                Left = 50,
-                Top = 306,
-                Width = 360,
-                Height = 22,
-                Font = new Font("Segoe UI", 9F),
-                ForeColor = GiaoDien.MauDo
-            };
-
-            LinkLabel lnkQuenMK = new LinkLabel()
-            {
-                Text = "Quên mật khẩu?",
-                Font = new Font("Segoe UI", 9.5F),
-                AutoSize = false,
-                Width = 140,
-                Height = 22,
-                Left = 50 + 360 - 140,
-                Top = 330,
-                TextAlign = ContentAlignment.MiddleRight,
-                LinkColor = GiaoDien.MauXanh,
-                ActiveLinkColor = GiaoDien.MauXanhDam,
-                LinkBehavior = LinkBehavior.HoverUnderline,
-                TabStop = false
-            };
-            lnkQuenMK.LinkClicked += (s, e) => MoQuenMatKhau();
-
-            btnDangNhap = new Button()
-            {
-                Text = "ĐĂNG NHẬP",
-                Left = 50,
-                Top = 362,
-                Width = 360,
-                Height = 46,
-                BackColor = GiaoDien.MauXanh,
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 11F, FontStyle.Bold),
-                FlatStyle = FlatStyle.Flat,
-                Cursor = Cursors.Hand
-            };
-            btnDangNhap.FlatAppearance.BorderSize = 0;
-            btnDangNhap.FlatAppearance.MouseOverBackColor = GiaoDien.MauXanhDam;
-            btnDangNhap.Click += (s, e) => DangNhap();
-
-            Label lblGoiY = new Label()
-            {
-                Text = "Mật khẩu mặc định: mã NV + 11  (vd: QL001 → QL00111)",
-                Font = new Font("Segoe UI", 8.5F, FontStyle.Italic),
-                ForeColor = Color.DarkGray,
-                Left = 50,
-                Top = 425,
-                Width = 360,
-                Height = 20,
-                TextAlign = ContentAlignment.MiddleCenter
-            };
-
-            pnlPhai.Controls.AddRange(new Control[] { btnDong, lblTieuDe, lblPhu, lblMa, pnlMa, lblMk, pnlMk, lblLoi, lnkQuenMK, btnDangNhap, lblGoiY });
-
-            this.Controls.Add(pnlPhai);
-            this.Controls.Add(pnlTrai);
-
-            this.AcceptButton = btnDangNhap;
-            this.CancelButton = btnDong;
-            this.Paint += (s, e) =>
-            {
-                using (Pen p = new Pen(Color.FromArgb(200, 200, 200)))
-                    e.Graphics.DrawRectangle(p, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
-            };
-
-            this.ResumeLayout(false);
         }
 
-        private Label TaoNhanO(string text, int top)
+        // Viền mảnh quanh form
+        private void frmDangNhap_Paint(object sender, PaintEventArgs e)
         {
-            return new Label()
-            {
-                Text = text,
-                Left = 50,
-                Top = top,
-                AutoSize = true,
-                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
-                ForeColor = Color.FromArgb(73, 80, 87)
-            };
+            using (Pen p = new Pen(Color.FromArgb(200, 200, 200)))
+                e.Graphics.DrawRectangle(p, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
         }
 
-        /// <summary>Ô nhập có viền bo, icon bên trái, viền đổi màu xanh khi đang nhập.</summary>
-        private Panel TaoONhap(string icon, int top, out TextBox txt)
+        // Viền ô nhập (xanh khi đang nhập). Panel.Tag giữ màu viền hiện tại.
+        private void pnlONhap_Paint(object sender, PaintEventArgs e)
         {
-            Panel p = new Panel() { Left = 50, Top = top, Width = 360, Height = 44, BackColor = MAU_O_NHAP, Tag = MAU_VIEN };
-            p.Paint += (s, e) =>
-            {
-                Color mau = p.Tag is Color ? (Color)p.Tag : MAU_VIEN;
-                using (Pen pen = new Pen(mau, 1.5F))
-                    e.Graphics.DrawRectangle(pen, 1, 1, p.Width - 3, p.Height - 3);
-            };
-
-            Label lblIcon = new Label()
-            {
-                Text = icon,
-                Font = new Font("Segoe UI Emoji", 11F),
-                ForeColor = Color.Gray,
-                BackColor = Color.Transparent,
-                Left = 10,
-                Top = 10,
-                Width = 28,
-                Height = 24
-            };
-            TextBox t = new TextBox()
-            {
-                BorderStyle = BorderStyle.None,
-                Left = 44,
-                Top = 12,
-                Width = 300,
-                Font = new Font("Segoe UI", 11.5F),
-                BackColor = MAU_O_NHAP
-            };
-            t.Enter += (s, e) => { p.Tag = GiaoDien.MauXanh; p.BackColor = Color.White; t.BackColor = Color.White; DongBoNutMat(); p.Invalidate(); };
-            t.Leave += (s, e) => { p.Tag = MAU_VIEN; p.BackColor = MAU_O_NHAP; t.BackColor = MAU_O_NHAP; DongBoNutMat(); p.Invalidate(); };
-            t.TextChanged += (s, e) => lblLoi.Text = "";
-            p.Click += (s, e) => t.Focus();
-            lblIcon.Click += (s, e) => t.Focus();
-
-            p.Controls.Add(lblIcon);
-            p.Controls.Add(t);
-            txt = t;
-            return p;
+            Panel p = (Panel)sender;
+            Color mau = p.Tag is Color ? (Color)p.Tag : MAU_VIEN;
+            using (Pen pen = new Pen(mau, 1.5F))
+                e.Graphics.DrawRectangle(pen, 1, 1, p.Width - 3, p.Height - 3);
         }
 
-        private void DongBoNutMat()
+        // Bấm vào khung / icon của ô nhập -> đưa con trỏ vào TextBox bên trong
+        private void pnlONhap_Click(object sender, EventArgs e)
         {
-            if (btnHienMK != null && btnHienMK.Parent != null) btnHienMK.BackColor = btnHienMK.Parent.BackColor;
+            Control c = (Control)sender;
+            Panel p = c as Panel ?? c.Parent as Panel;
+            if (p == pnlMa) txtMaNV.Focus();
+            else if (p == pnlMk) txtMatKhau.Focus();
+        }
+
+        private void oNhap_Enter(object sender, EventArgs e)
+        {
+            DoiMauONhap((TextBox)sender, true);
+        }
+
+        private void oNhap_Leave(object sender, EventArgs e)
+        {
+            DoiMauONhap((TextBox)sender, false);
+        }
+
+        private void oNhap_TextChanged(object sender, EventArgs e)
+        {
+            lblLoi.Text = "";
+        }
+
+        private void DoiMauONhap(TextBox t, bool dangNhap)
+        {
+            Panel p = (Panel)t.Parent;
+            Color nen = dangNhap ? Color.White : MAU_O_NHAP;
+            p.Tag = dangNhap ? GiaoDien.MauXanh : MAU_VIEN;
+            p.BackColor = nen;
+            t.BackColor = nen;
+            if (p == pnlMk) btnHienMK.BackColor = nen;
+            p.Invalidate();
+        }
+
+        private void btnDong_Click(object sender, EventArgs e)
+        {
+            Close();
+        }
+
+        private void btnDong_MouseEnter(object sender, EventArgs e)
+        {
+            btnDong.ForeColor = Color.White;
+        }
+
+        private void btnDong_MouseLeave(object sender, EventArgs e)
+        {
+            btnDong.ForeColor = Color.Gray;
+        }
+
+        private void btnHienMK_Click(object sender, EventArgs e)
+        {
+            txtMatKhau.UseSystemPasswordChar = !txtMatKhau.UseSystemPasswordChar;
+            btnHienMK.ForeColor = txtMatKhau.UseSystemPasswordChar ? Color.Gray : GiaoDien.MauXanh;
+            txtMatKhau.Focus();
+            txtMatKhau.SelectionStart = txtMatKhau.TextLength;
+        }
+
+        private void btnDangNhap_Click(object sender, EventArgs e)
+        {
+            DangNhap();
+        }
+
+        private void lnkQuenMK_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            using (frmQuenMatKhau f = new frmQuenMatKhau(txtMaNV.Text.Trim()))
+                f.ShowDialog(this);
+        }
+
+        // [10/11/2026 lần 5] đổi máy chủ SQL Server mà không cần sửa code
+        private void lnkCauHinh_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            using (frmCauHinhKetNoi f = new frmCauHinhKetNoi(null))
+                f.ShowDialog(this);
         }
 
         private static void DatGoiY(TextBox t, string goiY)
@@ -375,6 +177,7 @@ namespace QuanLyNhaThuoc.GUI
             if (t.IsHandleCreated) SendMessage(t.Handle, EM_SETCUEBANNER, (IntPtr)1, goiY);
         }
 
+        // Giữ chuột trái ở vùng trống để kéo form (form không có thanh tiêu đề)
         private void KeoForm(object sender, MouseEventArgs e)
         {
             if (e.Button != MouseButtons.Left) return;
@@ -382,7 +185,7 @@ namespace QuanLyNhaThuoc.GUI
             SendMessage(this.Handle, WM_NCLBUTTONDOWN, (IntPtr)HT_CAPTION, IntPtr.Zero);
         }
 
-        // ================== XỬ LÝ ==================
+        // ================== XỬ LÝ ĐĂNG NHẬP ==================
 
         private void BaoLoi(string loi, Control oCanSua)
         {
@@ -434,12 +237,6 @@ namespace QuanLyNhaThuoc.GUI
                     btnDangNhap.Text = "ĐĂNG NHẬP";
                 }
             }
-        }
-
-        private void MoQuenMatKhau()
-        {
-            using (frmQuenMatKhau f = new frmQuenMatKhau(txtMaNV.Text.Trim()))
-                f.ShowDialog(this);
         }
     }
 }

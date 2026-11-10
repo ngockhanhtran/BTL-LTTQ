@@ -31,6 +31,7 @@ namespace QuanLyNhaThuoc.DAL
 
         // [10/11/2026] Cột tùy chọn mới
         public string MaVach { get; set; }           // mã vạch in trên hộp (gán cho thuốc, kể cả thuốc đã có)
+        public string SoLo { get; set; } = "";       // [10/11/2026 lần 5] số lô (NgaySX, HanSD ở trên = của lô này)
         public string CongDung { get; set; }         // tên công dụng, nhiều cái cách nhau bằng dấu ;
 
         /// <summary>[10/11/2026] Tách cột CongDung theo dấu ; (bỏ trống, bỏ trùng).</summary>

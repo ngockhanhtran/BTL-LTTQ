@@ -9,22 +9,26 @@
        - Dữ liệu mẫu: chỉ thêm khi chưa có -> không bị trùng khóa.
      => Chạy lại bao nhiêu lần cũng không lỗi.
    * Muốn XÓA SẠCH và tạo lại từ đầu: bỏ comment khối "PHẦN 0" bên dưới.
-   * Yêu cầu: SQL Server 2012 trở lên (dùng DATEFROMPARTS).
-   * App kết nối: Data Source=.\SQLEXPRESS;Initial Catalog=QuanLyNhaThuoc
-     (sửa trong QuanLyNhaThuoc/DAL/DBConnection.cs nếu máy dùng tên khác).
+   * Yêu cầu: SQL Server 2012 trở lên (DATEFROMPARTS, FORMAT, HASHBYTES SHA2_256).
+   * App kết nối: lần đầu chạy app tự dò .\SQLEXPRESS, ., (localdb)\MSSQLLocalDB;
+     không được thì hiện form "Cấu hình kết nối" (không cần sửa code).
+   * Muốn có nhiều dữ liệu để demo báo cáo: chạy thêm file DuLieuDemo.sql (1 lần).
 
    NỘI DUNG
      PHẦN 0. (Tùy chọn) Xóa CSDL cũ
      PHẦN 1. Tạo CSDL
      PHẦN 2. Tạo bảng
      PHẦN 2b. Bổ sung cấu trúc (bảng VaiTro, cột mới - chạy được trên CSDL cũ)
-     PHẦN 3. Trigger đồng bộ TongTien hóa đơn
-     PHẦN 4. Stored procedure (9 yêu cầu đề bài + cảnh báo + dashboard)
+              + lần 5: mật khẩu băm, lô thuốc, kê đơn, trả hàng, nhật ký
+     PHẦN 3. Trigger đồng bộ TongTien hóa đơn + nhật ký đổi giá
+     PHẦN 4. Stored procedure (lô thuốc FEFO, trả hàng, 9 yêu cầu đề bài,
+             cảnh báo, dashboard)
      PHẦN 5. Dữ liệu mẫu
        5.1 Danh mục, nhân viên, NCC, thuốc
        5.2 Công dụng + gán công dụng cho thuốc (yêu cầu 4)
        5.3 Vai trò, tài khoản đăng nhập, mã vạch, khách hàng mẫu
-     PHẦN 6. Sửa dữ liệu cũ (TongTien bị sai ở các bản trước)
+     PHẦN 6. Sửa dữ liệu cũ (TongTien bị sai ở các bản trước,
+             tồn kho cũ chưa có lô -> lô TON-DAU)
 
    LỊCH SỬ CẬP NHẬT
      - first edition : tạo bảng + proc 9 yêu cầu.
@@ -102,6 +106,47 @@
              QLxxx = Quản lý | TKxxx = Thủ kho | NVxx (và mã khác) = Bán hàng.
          * Phần 5.3: gán vai trò mặc định theo tiền tố mã (CASE ... LIKE).
          * Sửa dữ liệu đã chạy lần 3: NV01, NV03 đang là QL / TK -> BH.
+     - 10/11/2026 (lần 5) - BĂM MẬT KHẨU, LÔ THUỐC (FEFO), KÊ ĐƠN, TRẢ HÀNG,
+       NHẬT KÝ HOẠT ĐỘNG:
+         * MẬT KHẨU (Phần 2b): bỏ cột NhanVien.MatKhau (chữ thường), thay bằng
+             MatKhauHash VARCHAR(64) = SHA-256(Salt + mật khẩu), dạng hex HOA
+             MatKhauSalt VARCHAR(32) = 16 byte ngẫu nhiên, dạng hex, mỗi NV khác nhau
+             PhaiDoiMK   BIT         = 1 khi quản lý vừa đặt lại -> NV phải đổi khi đăng nhập
+           Mật khẩu cũ được chuyển sang dạng băm TRƯỚC khi xóa cột (không ai bị
+           mất tài khoản). App (C#) băm giống hệt: SHA256(UTF-16LE(Salt + MK)).
+           Quản lý KHÔNG xem được mật khẩu nữa, chỉ đặt lại. Proc mới sp_DatMatKhau.
+           Phần 5.3: TK001 / QL001 thêm không kèm mật khẩu, mật khẩu mặc định
+           (mã NV + '11') được băm bằng HASHBYTES('SHA2_256', ...).
+         * LÔ THUỐC (Phần 2b + 4): bảng LoThuoc (mỗi lần nhập = 1 lô, có số lô,
+           NSX, HSD, SL nhập, SL còn) và ChiTietHDB_Lo (hóa đơn bán lấy từ lô nào).
+             - Bán: sp_XuatKhoFEFO lấy lô HẾT HẠN TRƯỚC (First Expired First Out),
+               bỏ qua lô đã hết hạn.
+             - Nhập: sp_NhapLo tạo lô mới.
+             - Thuoc.SLHienCo = tổng SL còn của các lô, Thuoc.HanSD = hạn gần nhất
+               của lô còn hàng (sp_DongBoThuocTuLo) -> báo cáo Y/C 6 và cảnh báo
+               KHÔNG phải sửa.
+             - fn_SLBanDuoc: số lượng còn hạn bán được.
+             - sp_HuyThuocHetHan viết lại: chỉ hủy LÔ đã hết hạn (lô còn hạn của
+               cùng thuốc vẫn bán được); LichSuHuyThuoc thêm MaLo, SoLo.
+             - Phần 6: tồn kho cũ chưa có lô -> tạo lô "TON-DAU" (sp_TaoLoTonDau).
+             - sp_DanhSachLoThuoc: xem lô theo thuốc / tất cả lô.
+         * KÊ ĐƠN: Thuoc.KeDon (1 = thuốc kê đơn), HoaDonBan.MaDonThuoc (bắt
+           buộc nhập khi hóa đơn có thuốc kê đơn - kiểm tra ở C#). Phần 5.3:
+           TH010 Amoxicillin là thuốc kê đơn.
+         * TRẢ HÀNG / HỦY HÓA ĐƠN: bảng PhieuTraHang, ChiTietTraHang; HoaDonBan
+           thêm DaHuy, NgayHuy, MaNVHuy, LyDoHuy. sp_TraHangDong trả 1 dòng:
+           giảm SoLuong / ThanhTien của ChiTietHDB (trigger TongTien tự tính lại),
+           trả hàng về đúng lô đã xuất. Các proc báo cáo 8, 9 và dashboard thêm
+           điều kiện h.DaHuy = 0 (bỏ hóa đơn đã hủy).
+         * NHẬT KÝ: bảng NhatKyHoatDong (ai, lúc nào, làm gì). App ghi đăng nhập,
+           đăng xuất, sửa NV, thanh toán, trả hàng, nhập hàng, sao lưu...
+           Trigger mới trg_Thuoc_NhatKyGia tự ghi mỗi lần đổi giá nhập / giá bán;
+           người sửa lấy từ CONTEXT_INFO do app gán khi mở kết nối
+           (fn_NguoiDungHienTai).
+         * Kết nối: app không còn sửa chuỗi kết nối trong code, có form "Cấu hình
+           kết nối" (tự dò .\SQLEXPRESS, ., (localdb)\MSSQLLocalDB).
+         * Dữ liệu demo nhiều (50 thuốc, 12 tháng bán / nhập) để ở file riêng
+           DuLieuDemo.sql - chạy SAU file này, chỉ chạy 1 lần.
    ===================================================================== */
 
 
@@ -316,8 +361,7 @@ CREATE TABLE VaiTro (
 GO
 
 -- NhanVien: tài khoản đăng nhập + phân quyền + quên mật khẩu + nghỉ việc
-IF COL_LENGTH('NhanVien', 'MatKhau') IS NULL
-    ALTER TABLE NhanVien ADD MatKhau NVARCHAR(50) NULL;
+-- [10/11/2026 lần 5] bỏ cột MatKhau (chữ thường) -> MatKhauHash / MatKhauSalt ở cuối Phần 2b
 IF COL_LENGTH('NhanVien', 'MaVaiTro') IS NULL
     ALTER TABLE NhanVien ADD MaVaiTro VARCHAR(10) NULL
         CONSTRAINT FK_NhanVien_VaiTro REFERENCES VaiTro(MaVaiTro);
@@ -360,8 +404,140 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Thuoc_MaVach' AND obje
 GO
 
 
+/* ---------------------------------------------------------------------
+   [10/11/2026 lần 5] BỔ SUNG CẤU TRÚC: băm mật khẩu, lô thuốc, kê đơn,
+   trả hàng / hủy hóa đơn, nhật ký hoạt động. Xem LỊCH SỬ CẬP NHẬT.
+   --------------------------------------------------------------------- */
+
+-- NhanVien: mật khẩu băm SHA-256 có salt (thay cho cột MatKhau chữ thường)
+IF COL_LENGTH('NhanVien', 'MatKhauHash') IS NULL
+    ALTER TABLE NhanVien ADD MatKhauHash VARCHAR(64) NULL;
+IF COL_LENGTH('NhanVien', 'MatKhauSalt') IS NULL
+    ALTER TABLE NhanVien ADD MatKhauSalt VARCHAR(32) NULL;
+IF COL_LENGTH('NhanVien', 'PhaiDoiMK') IS NULL
+    ALTER TABLE NhanVien ADD PhaiDoiMK BIT NOT NULL
+        CONSTRAINT DF_NhanVien_PhaiDoiMK DEFAULT 0;
+GO
+
+-- CSDL đã chạy lần 3-4 (còn cột MatKhau chữ thường): băm mật khẩu đang dùng rồi xóa cột.
+-- Dùng sp_executesql vì cột MatKhau có thể không còn (SQL Server kiểm tra tên cột khi biên dịch).
+IF COL_LENGTH('NhanVien', 'MatKhau') IS NOT NULL
+BEGIN
+    EXEC sp_executesql N'
+        UPDATE NhanVien
+        SET MatKhauSalt = CONVERT(VARCHAR(32), CAST(NEWID() AS BINARY(16)), 2)
+        WHERE MatKhauHash IS NULL AND LTRIM(RTRIM(ISNULL(MatKhau, N''''))) <> N'''';
+
+        UPDATE NhanVien
+        SET MatKhauHash = CONVERT(VARCHAR(64), HASHBYTES(''SHA2_256'', CAST(MatKhauSalt AS NVARCHAR(32)) + MatKhau), 2)
+        WHERE MatKhauHash IS NULL AND MatKhauSalt IS NOT NULL AND LTRIM(RTRIM(ISNULL(MatKhau, N''''))) <> N'''';';
+
+    ALTER TABLE NhanVien DROP COLUMN MatKhau;
+END
+GO
+
+-- Thuoc: thuốc kê đơn (bán phải nhập mã đơn thuốc)
+IF COL_LENGTH('Thuoc', 'KeDon') IS NULL
+    ALTER TABLE Thuoc ADD KeDon BIT NOT NULL
+        CONSTRAINT DF_Thuoc_KeDon DEFAULT 0;
+
+-- HoaDonBan: mã đơn thuốc (khi có thuốc kê đơn) + hủy hóa đơn
+IF COL_LENGTH('HoaDonBan', 'MaDonThuoc') IS NULL
+    ALTER TABLE HoaDonBan ADD MaDonThuoc NVARCHAR(30) NULL;
+IF COL_LENGTH('HoaDonBan', 'DaHuy') IS NULL
+    ALTER TABLE HoaDonBan ADD DaHuy BIT NOT NULL
+        CONSTRAINT DF_HoaDonBan_DaHuy DEFAULT 0;
+IF COL_LENGTH('HoaDonBan', 'NgayHuy') IS NULL
+    ALTER TABLE HoaDonBan ADD NgayHuy DATETIME NULL;
+IF COL_LENGTH('HoaDonBan', 'MaNVHuy') IS NULL
+    ALTER TABLE HoaDonBan ADD MaNVHuy VARCHAR(10) NULL
+        CONSTRAINT FK_HoaDonBan_NVHuy REFERENCES NhanVien(MaNV);
+IF COL_LENGTH('HoaDonBan', 'LyDoHuy') IS NULL
+    ALTER TABLE HoaDonBan ADD LyDoHuy NVARCHAR(255) NULL;
+
+-- LichSuHuyThuoc: hủy theo lô
+IF COL_LENGTH('LichSuHuyThuoc', 'MaLo') IS NULL
+    ALTER TABLE LichSuHuyThuoc ADD MaLo INT NULL;
+IF COL_LENGTH('LichSuHuyThuoc', 'SoLo') IS NULL
+    ALTER TABLE LichSuHuyThuoc ADD SoLo NVARCHAR(30) NULL;
+GO
+
+-- 18. Lô thuốc: mỗi lần nhập 1 thuốc = 1 lô (cùng thuốc có nhiều lô, nhiều hạn dùng)
+--     SLCon giảm khi bán (FEFO), tăng khi khách trả hàng, về 0 khi hủy lô hết hạn.
+IF OBJECT_ID('LoThuoc', 'U') IS NULL
+CREATE TABLE LoThuoc (
+    MaLo       INT IDENTITY(1,1) PRIMARY KEY,
+    MaThuoc    VARCHAR(10)   NOT NULL FOREIGN KEY REFERENCES Thuoc(MaThuoc),
+    SoLo       NVARCHAR(30)  NOT NULL,              -- số lô in trên hộp (không có thì tự đặt)
+    NgaySX     DATE          NULL,
+    HanSD      DATE          NOT NULL,
+    SLNhap     INT           NOT NULL,
+    SLCon      INT           NOT NULL,
+    DonGiaNhap DECIMAL(18,2) NOT NULL DEFAULT 0,
+    MaHDN      VARCHAR(10)   NULL FOREIGN KEY REFERENCES HoaDonNhap(MaHDN),   -- NULL = tồn đầu kỳ
+    NgayNhap   DATETIME      NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT CK_LoThuoc_SL CHECK (SLNhap >= 0 AND SLCon >= 0)
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_LoThuoc_FEFO' AND object_id = OBJECT_ID('LoThuoc'))
+    CREATE INDEX IX_LoThuoc_FEFO ON LoThuoc(MaThuoc, HanSD) INCLUDE (SLCon);
+GO
+
+-- 19. Hóa đơn bán lấy hàng từ lô nào (để trả hàng về đúng lô)
+IF OBJECT_ID('ChiTietHDB_Lo', 'U') IS NULL
+CREATE TABLE ChiTietHDB_Lo (
+    MaHDB   VARCHAR(10) NOT NULL,
+    MaThuoc VARCHAR(10) NOT NULL,
+    MaLo    INT         NOT NULL FOREIGN KEY REFERENCES LoThuoc(MaLo),
+    SoLuong INT         NOT NULL,
+    PRIMARY KEY (MaHDB, MaThuoc, MaLo),
+    CONSTRAINT FK_ChiTietHDB_Lo_ChiTietHDB FOREIGN KEY (MaHDB, MaThuoc) REFERENCES ChiTietHDB(MaHDB, MaThuoc)
+);
+
+-- 20. Phiếu trả hàng (trả 1 phần) / hủy hóa đơn (trả toàn bộ, LaHuyHoaDon = 1)
+IF OBJECT_ID('PhieuTraHang', 'U') IS NULL
+CREATE TABLE PhieuTraHang (
+    MaPTH       VARCHAR(10)   PRIMARY KEY,
+    MaHDB       VARCHAR(10)   NOT NULL FOREIGN KEY REFERENCES HoaDonBan(MaHDB),
+    NgayTra     DATETIME      NOT NULL DEFAULT GETDATE(),
+    MaNV        VARCHAR(10)   NULL FOREIGN KEY REFERENCES NhanVien(MaNV),
+    LyDo        NVARCHAR(255) NULL,
+    TienHoan    DECIMAL(18,2) NOT NULL DEFAULT 0,
+    DiemTru     INT           NOT NULL DEFAULT 0,   -- điểm đã cộng bị trừ lại
+    DiemHoan    INT           NOT NULL DEFAULT 0,   -- điểm đã dùng được trả lại (hủy cả hóa đơn)
+    LaHuyHoaDon BIT           NOT NULL DEFAULT 0
+);
+
+IF OBJECT_ID('ChiTietTraHang', 'U') IS NULL
+CREATE TABLE ChiTietTraHang (
+    MaPTH    VARCHAR(10)   NOT NULL FOREIGN KEY REFERENCES PhieuTraHang(MaPTH),
+    MaThuoc  VARCHAR(10)   NOT NULL FOREIGN KEY REFERENCES Thuoc(MaThuoc),
+    SoLuong  INT           NOT NULL,
+    TienHoan DECIMAL(18,2) NOT NULL,
+    PRIMARY KEY (MaPTH, MaThuoc)
+);
+
+-- 21. Nhật ký hoạt động (không khóa ngoại MaNV để xóa NV không bị vướng nhật ký)
+IF OBJECT_ID('NhatKyHoatDong', 'U') IS NULL
+CREATE TABLE NhatKyHoatDong (
+    MaNK     BIGINT IDENTITY(1,1) PRIMARY KEY,
+    ThoiGian DATETIME      NOT NULL DEFAULT GETDATE(),
+    MaNV     VARCHAR(10)   NULL,
+    TenNV    NVARCHAR(50)  NULL,
+    HanhDong NVARCHAR(50)  NOT NULL,     -- Đăng nhập, Sửa giá, Thanh toán, Trả hàng...
+    DoiTuong NVARCHAR(50)  NULL,         -- mã thuốc / mã hóa đơn / mã NV...
+    ChiTiet  NVARCHAR(500) NULL,
+    MayTinh  NVARCHAR(100) NULL
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_NhatKy_ThoiGian' AND object_id = OBJECT_ID('NhatKyHoatDong'))
+    CREATE INDEX IX_NhatKy_ThoiGian ON NhatKyHoatDong(ThoiGian DESC);
+GO
+
+
 /* =====================================================================
    PHẦN 3. TRIGGER: TongTien = SUM(ThanhTien) của chi tiết
+   + [10/11/2026 lần 5] trigger nhật ký đổi giá thuốc
    (sửa lỗi báo cáo Top 2 NV ra 0.00 vì TongTien không được cập nhật)
    ===================================================================== */
 IF OBJECT_ID('trg_ChiTietHDB_CapNhatTongTien', 'TR') IS NOT NULL
@@ -396,11 +572,380 @@ BEGIN
 END
 GO
 
+-- ---------------------------------------------------------------------
+-- [10/11/2026 lần 5] Người dùng đang thao tác: app gán mã NV vào CONTEXT_INFO
+-- mỗi khi mở kết nối (DAL/DBConnection.cs). Chạy từ SSMS thì trả về NULL.
+-- ---------------------------------------------------------------------
+IF OBJECT_ID('fn_NguoiDungHienTai', 'FN') IS NOT NULL
+    DROP FUNCTION fn_NguoiDungHienTai;
+GO
+CREATE FUNCTION fn_NguoiDungHienTai()
+RETURNS VARCHAR(10)
+AS
+BEGIN
+    DECLARE @Ma VARCHAR(128) = CAST(CONTEXT_INFO() AS VARCHAR(128));
+    SET @Ma = LTRIM(RTRIM(REPLACE(ISNULL(@Ma, ''), CHAR(0), '')));
+    RETURN CASE WHEN @Ma = '' THEN NULL ELSE LEFT(@Ma, 10) END;
+END
+GO
+
+-- ---------------------------------------------------------------------
+-- [10/11/2026 lần 5] Nhật ký đổi giá: mỗi lần DonGiaNhap / GiaBan thay đổi
+-- (sửa ở Danh mục thuốc, nhập hàng, import Excel...) đều được ghi lại.
+-- ---------------------------------------------------------------------
+IF OBJECT_ID('trg_Thuoc_NhatKyGia', 'TR') IS NOT NULL
+    DROP TRIGGER trg_Thuoc_NhatKyGia;
+GO
+CREATE TRIGGER trg_Thuoc_NhatKyGia
+ON Thuoc
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF NOT (UPDATE(GiaBan) OR UPDATE(DonGiaNhap)) RETURN;
+
+    DECLARE @MaNV VARCHAR(10) = dbo.fn_NguoiDungHienTai();
+
+    INSERT INTO NhatKyHoatDong (ThoiGian, MaNV, TenNV, HanhDong, DoiTuong, ChiTiet, MayTinh)
+    SELECT GETDATE(), @MaNV, nv.TenNV, N'Đổi giá thuốc', i.MaThuoc,
+           i.TenThuoc + N': giá nhập ' + FORMAT(d.DonGiaNhap, 'N0') + N' -> ' + FORMAT(i.DonGiaNhap, 'N0')
+                      + N', giá bán ' + FORMAT(d.GiaBan, 'N0') + N' -> ' + FORMAT(i.GiaBan, 'N0'),
+           HOST_NAME()
+    FROM inserted i
+    JOIN deleted d ON d.MaThuoc = i.MaThuoc
+    LEFT JOIN NhanVien nv ON nv.MaNV = @MaNV
+    WHERE i.GiaBan <> d.GiaBan OR i.DonGiaNhap <> d.DonGiaNhap;
+END
+GO
+
 
 /* =====================================================================
    PHẦN 4. STORED PROCEDURE
    Yêu cầu 1, 2, 3 xử lý trong C# (DAL: HoaDonBanDAO, HoaDonNhapDAO).
    ===================================================================== */
+
+-- =====================================================================
+-- [10/11/2026 lần 5] LÔ THUỐC - FEFO (First Expired, First Out)
+--   Thuoc.SLHienCo = SUM(LoThuoc.SLCon)
+--   Thuoc.HanSD    = hạn gần nhất của lô còn hàng (hết hàng: hạn của lô mới nhất)
+-- =====================================================================
+
+-- Số lượng CÒN HẠN bán được của 1 thuốc tại ngày @Ngay
+IF OBJECT_ID('fn_SLBanDuoc', 'FN') IS NOT NULL
+    DROP FUNCTION fn_SLBanDuoc;
+GO
+CREATE FUNCTION fn_SLBanDuoc (@MaThuoc VARCHAR(10), @Ngay DATE)
+RETURNS INT
+AS
+BEGIN
+    IF EXISTS (SELECT 1 FROM LoThuoc WHERE MaThuoc = @MaThuoc)
+        RETURN (SELECT ISNULL(SUM(SLCon), 0) FROM LoThuoc
+                WHERE MaThuoc = @MaThuoc AND SLCon > 0 AND HanSD >= @Ngay);
+    -- thuốc chưa có lô (CSDL cũ chưa chạy Phần 6): dùng số liệu ở bảng Thuoc
+    RETURN ISNULL((SELECT CASE WHEN HanSD IS NULL OR HanSD >= @Ngay THEN SLHienCo ELSE 0 END
+                   FROM Thuoc WHERE MaThuoc = @MaThuoc), 0);
+END
+GO
+
+-- Cập nhật SLHienCo + HanSD của thuốc theo các lô (@MaThuoc NULL = tất cả thuốc có lô)
+IF OBJECT_ID('sp_DongBoThuocTuLo', 'P') IS NOT NULL
+    DROP PROCEDURE sp_DongBoThuocTuLo;
+GO
+CREATE PROCEDURE sp_DongBoThuocTuLo
+    @MaThuoc VARCHAR(10) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE t
+    SET SLHienCo = l.TongCon,
+        HanSD    = ISNULL(l.HanGanNhat, l.HanMoiNhat)
+    FROM Thuoc t
+    JOIN (SELECT MaThuoc,
+                 SUM(SLCon)                              AS TongCon,
+                 MIN(CASE WHEN SLCon > 0 THEN HanSD END) AS HanGanNhat,
+                 MAX(HanSD)                              AS HanMoiNhat
+          FROM LoThuoc
+          WHERE @MaThuoc IS NULL OR MaThuoc = @MaThuoc
+          GROUP BY MaThuoc) l ON l.MaThuoc = t.MaThuoc
+    WHERE t.SLHienCo <> l.TongCon
+       OR ISNULL(t.HanSD, '19000101') <> ISNULL(l.HanGanNhat, l.HanMoiNhat);
+END
+GO
+
+-- Tồn kho có từ trước khi quản lý theo lô -> gom thành 1 lô "TON-DAU"
+-- (@MaThuoc NULL = tất cả thuốc). Chạy lại nhiều lần không bị nhân đôi.
+IF OBJECT_ID('sp_TaoLoTonDau', 'P') IS NOT NULL
+    DROP PROCEDURE sp_TaoLoTonDau;
+GO
+CREATE PROCEDURE sp_TaoLoTonDau
+    @MaThuoc VARCHAR(10) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO LoThuoc (MaThuoc, SoLo, NgaySX, HanSD, SLNhap, SLCon, DonGiaNhap, MaHDN, NgayNhap)
+    SELECT t.MaThuoc, N'TON-DAU', t.NgaySX,
+           ISNULL(t.HanSD, DATEADD(YEAR, 2, CAST(GETDATE() AS DATE))),
+           t.SLHienCo - ISNULL(l.TongCon, 0), t.SLHienCo - ISNULL(l.TongCon, 0),
+           t.DonGiaNhap, NULL, GETDATE()
+    FROM Thuoc t
+    LEFT JOIN (SELECT MaThuoc, SUM(SLCon) AS TongCon FROM LoThuoc GROUP BY MaThuoc) l ON l.MaThuoc = t.MaThuoc
+    WHERE (@MaThuoc IS NULL OR t.MaThuoc = @MaThuoc)
+      AND t.SLHienCo > ISNULL(l.TongCon, 0);
+END
+GO
+
+-- Nhập 1 lô (gọi từ C# trong transaction nhập hàng / import Excel)
+IF OBJECT_ID('sp_NhapLo', 'P') IS NOT NULL
+    DROP PROCEDURE sp_NhapLo;
+GO
+CREATE PROCEDURE sp_NhapLo
+    @MaThuoc    VARCHAR(10),
+    @SoLo       NVARCHAR(30)  = NULL,
+    @NgaySX     DATE          = NULL,
+    @HanSD      DATE,
+    @SoLuong    INT,
+    @DonGiaNhap DECIMAL(18,2) = 0,
+    @MaHDN      VARCHAR(10)   = NULL,
+    @NgayNhap   DATETIME      = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @SoLuong <= 0
+    BEGIN
+        RAISERROR(N'Số lượng nhập phải lớn hơn 0.', 16, 1);
+        RETURN;
+    END
+    IF @HanSD IS NULL
+    BEGIN
+        RAISERROR(N'Lô thuốc %s chưa có hạn sử dụng.', 16, 1, @MaThuoc);
+        RETURN;
+    END
+    IF @NgaySX IS NOT NULL AND @HanSD <= @NgaySX
+    BEGIN
+        RAISERROR(N'Hạn sử dụng của lô thuốc %s phải sau ngày sản xuất.', 16, 1, @MaThuoc);
+        RETURN;
+    END
+
+    -- tồn kho cũ chưa có lô thì gom thành lô TON-DAU trước, tránh lệch số lượng
+    EXEC sp_TaoLoTonDau @MaThuoc;
+
+    SET @SoLo = NULLIF(LTRIM(RTRIM(@SoLo)), N'');
+    IF @SoLo IS NULL
+        SET @SoLo = ISNULL(@MaHDN, 'LO') + N'-' + CONVERT(NVARCHAR(8), @HanSD, 112);
+
+    INSERT INTO LoThuoc (MaThuoc, SoLo, NgaySX, HanSD, SLNhap, SLCon, DonGiaNhap, MaHDN, NgayNhap)
+    VALUES (@MaThuoc, @SoLo, @NgaySX, @HanSD, @SoLuong, @SoLuong, ISNULL(@DonGiaNhap, 0), @MaHDN, ISNULL(@NgayNhap, GETDATE()));
+
+    EXEC sp_DongBoThuocTuLo @MaThuoc;
+END
+GO
+
+-- Xuất kho cho 1 dòng hóa đơn bán theo FEFO: lô có hạn gần nhất (còn hạn) xuất trước.
+-- Dòng ChiTietHDB phải được thêm TRƯỚC khi gọi proc này (khóa ngoại ChiTietHDB_Lo).
+IF OBJECT_ID('sp_XuatKhoFEFO', 'P') IS NOT NULL
+    DROP PROCEDURE sp_XuatKhoFEFO;
+GO
+CREATE PROCEDURE sp_XuatKhoFEFO
+    @MaHDB   VARCHAR(10),
+    @MaThuoc VARCHAR(10),
+    @SoLuong INT,
+    @NgayBan DATETIME = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Ngay DATE = CAST(ISNULL(@NgayBan, GETDATE()) AS DATE);
+    DECLARE @ConLai INT = @SoLuong, @MaLo INT, @Co INT, @Lay INT, @CoTheBan INT;
+
+    EXEC sp_TaoLoTonDau @MaThuoc;
+
+    SELECT @CoTheBan = ISNULL(SUM(SLCon), 0)
+    FROM LoThuoc WITH (UPDLOCK, HOLDLOCK)
+    WHERE MaThuoc = @MaThuoc AND SLCon > 0 AND HanSD >= @Ngay;
+
+    IF @CoTheBan < @SoLuong
+    BEGIN
+        RAISERROR(N'Thuốc %s chỉ còn %d (còn hạn) - không đủ để bán %d.', 16, 1, @MaThuoc, @CoTheBan, @SoLuong);
+        RETURN;
+    END
+
+    WHILE @ConLai > 0
+    BEGIN
+        SET @MaLo = NULL;
+        SELECT TOP 1 @MaLo = MaLo, @Co = SLCon
+        FROM LoThuoc WITH (UPDLOCK)
+        WHERE MaThuoc = @MaThuoc AND SLCon > 0 AND HanSD >= @Ngay
+        ORDER BY HanSD, MaLo;
+
+        IF @MaLo IS NULL BREAK;
+
+        SET @Lay = CASE WHEN @Co < @ConLai THEN @Co ELSE @ConLai END;
+
+        UPDATE LoThuoc SET SLCon = SLCon - @Lay WHERE MaLo = @MaLo;
+
+        IF EXISTS (SELECT 1 FROM ChiTietHDB_Lo WHERE MaHDB = @MaHDB AND MaThuoc = @MaThuoc AND MaLo = @MaLo)
+            UPDATE ChiTietHDB_Lo SET SoLuong = SoLuong + @Lay
+            WHERE MaHDB = @MaHDB AND MaThuoc = @MaThuoc AND MaLo = @MaLo;
+        ELSE
+            INSERT INTO ChiTietHDB_Lo (MaHDB, MaThuoc, MaLo, SoLuong) VALUES (@MaHDB, @MaThuoc, @MaLo, @Lay);
+
+        SET @ConLai = @ConLai - @Lay;
+    END
+
+    EXEC sp_DongBoThuocTuLo @MaThuoc;
+END
+GO
+
+-- Trả 1 dòng hàng: giảm SL / thành tiền của chi tiết hóa đơn, trả hàng về đúng lô đã xuất
+-- (lô hạn xa nhất trước), ghi ChiTietTraHang. @TienHoan trả về số tiền hoàn cho dòng này.
+-- Phiếu PhieuTraHang (@MaPTH) phải được tạo trước (C# làm trong cùng transaction).
+IF OBJECT_ID('sp_TraHangDong', 'P') IS NOT NULL
+    DROP PROCEDURE sp_TraHangDong;
+GO
+CREATE PROCEDURE sp_TraHangDong
+    @MaPTH    VARCHAR(10),
+    @MaHDB    VARCHAR(10),
+    @MaThuoc  VARCHAR(10),
+    @SoLuong  INT,
+    @TienHoan DECIMAL(18,2) OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @SLBan INT, @ThanhTien DECIMAL(18,2), @ConLai INT, @MaLo INT, @Co INT, @Lay INT;
+
+    SELECT @SLBan = SoLuong, @ThanhTien = ThanhTien
+    FROM ChiTietHDB WITH (UPDLOCK)
+    WHERE MaHDB = @MaHDB AND MaThuoc = @MaThuoc;
+
+    IF @SLBan IS NULL
+    BEGIN
+        RAISERROR(N'Hóa đơn %s không có thuốc %s.', 16, 1, @MaHDB, @MaThuoc);
+        RETURN;
+    END
+    IF @SoLuong <= 0 OR @SoLuong > @SLBan
+    BEGIN
+        RAISERROR(N'Số lượng trả của thuốc %s không hợp lệ (còn %d trên hóa đơn).', 16, 1, @MaThuoc, @SLBan);
+        RETURN;
+    END
+
+    -- tiền hoàn theo đơn giá THỰC đã trả (đã trừ giảm giá %, đổi điểm)
+    SET @TienHoan = CASE WHEN @SoLuong = @SLBan THEN @ThanhTien
+                         ELSE ROUND(@ThanhTien * @SoLuong / @SLBan, 0) END;
+
+    UPDATE ChiTietHDB
+    SET SoLuong = SoLuong - @SoLuong, ThanhTien = ThanhTien - @TienHoan
+    WHERE MaHDB = @MaHDB AND MaThuoc = @MaThuoc;
+
+    -- trả về các lô đã xuất
+    SET @ConLai = @SoLuong;
+    WHILE @ConLai > 0
+    BEGIN
+        SET @MaLo = NULL;
+        SELECT TOP 1 @MaLo = x.MaLo, @Co = x.SoLuong
+        FROM ChiTietHDB_Lo x
+        JOIN LoThuoc l ON l.MaLo = x.MaLo
+        WHERE x.MaHDB = @MaHDB AND x.MaThuoc = @MaThuoc AND x.SoLuong > 0
+        ORDER BY l.HanSD DESC, x.MaLo DESC;
+
+        IF @MaLo IS NULL BREAK;
+
+        SET @Lay = CASE WHEN @Co < @ConLai THEN @Co ELSE @ConLai END;
+        UPDATE LoThuoc SET SLCon = SLCon + @Lay WHERE MaLo = @MaLo;
+        UPDATE ChiTietHDB_Lo SET SoLuong = SoLuong - @Lay
+        WHERE MaHDB = @MaHDB AND MaThuoc = @MaThuoc AND MaLo = @MaLo;
+        SET @ConLai = @ConLai - @Lay;
+    END
+    DELETE FROM ChiTietHDB_Lo WHERE MaHDB = @MaHDB AND MaThuoc = @MaThuoc AND SoLuong <= 0;
+
+    -- hóa đơn bán trước khi có lô (không biết lô nào): nhập lại thành lô riêng
+    IF @ConLai > 0
+        INSERT INTO LoThuoc (MaThuoc, SoLo, NgaySX, HanSD, SLNhap, SLCon, DonGiaNhap, MaHDN, NgayNhap)
+        SELECT MaThuoc, N'TRA-' + @MaPTH, NgaySX,
+               ISNULL(HanSD, DATEADD(YEAR, 1, CAST(GETDATE() AS DATE))),
+               @ConLai, @ConLai, DonGiaNhap, NULL, GETDATE()
+        FROM Thuoc WHERE MaThuoc = @MaThuoc;
+
+    INSERT INTO ChiTietTraHang (MaPTH, MaThuoc, SoLuong, TienHoan)
+    VALUES (@MaPTH, @MaThuoc, @SoLuong, @TienHoan);
+
+    EXEC sp_DongBoThuocTuLo @MaThuoc;
+END
+GO
+
+-- Danh sách lô: theo 1 thuốc (@MaThuoc) hoặc tất cả; @ChiConHang = 1 bỏ lô đã hết.
+--   ThuTuFEFO: thứ tự sẽ bán (1 = lô bán tiếp theo); lô hết hạn / hết hàng = NULL
+--   MucCanhBao: 2 hết hạn (đỏ) | 1 sắp hết hạn (vàng) | 0 bình thường
+IF OBJECT_ID('sp_DanhSachLoThuoc', 'P') IS NOT NULL
+    DROP PROCEDURE sp_DanhSachLoThuoc;
+GO
+CREATE PROCEDURE sp_DanhSachLoThuoc
+    @MaThuoc       VARCHAR(10) = NULL,
+    @ChiConHang    BIT = 0,
+    @SoNgayCanhBao INT = 30
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @HomNay     DATE = CAST(GETDATE() AS DATE);
+    DECLARE @MocCanhBao DATE = DATEADD(DAY, @SoNgayCanhBao, @HomNay);
+
+    SELECT
+        l.MaLo,
+        l.MaThuoc,
+        t.TenThuoc,
+        l.SoLo,
+        l.NgaySX,
+        l.HanSD,
+        DATEDIFF(DAY, @HomNay, l.HanSD) AS SoNgayConLai,
+        l.SLNhap,
+        l.SLCon,
+        l.DonGiaNhap,
+        l.SLCon * l.DonGiaNhap AS GiaTriTon,
+        l.MaHDN,
+        l.NgayNhap,
+        CASE WHEN l.SLCon > 0 AND l.HanSD >= @HomNay
+             THEN ROW_NUMBER() OVER (PARTITION BY l.MaThuoc,
+                                     CASE WHEN l.SLCon > 0 AND l.HanSD >= @HomNay THEN 1 ELSE 0 END
+                                     ORDER BY l.HanSD, l.MaLo)
+        END AS ThuTuFEFO,
+        CASE WHEN l.SLCon = 0              THEN N'Đã hết'
+             WHEN l.HanSD < @HomNay        THEN N'Hết hạn'
+             WHEN l.HanSD <= @MocCanhBao   THEN N'Sắp hết hạn'
+             ELSE N'Còn hạn' END AS TinhTrang,
+        CASE WHEN l.SLCon > 0 AND l.HanSD < @HomNay      THEN 2
+             WHEN l.SLCon > 0 AND l.HanSD <= @MocCanhBao THEN 1
+             ELSE 0 END AS MucCanhBao
+    FROM LoThuoc l
+    JOIN Thuoc t ON t.MaThuoc = l.MaThuoc
+    WHERE (@MaThuoc IS NULL OR l.MaThuoc = @MaThuoc)
+      AND (@ChiConHang = 0 OR l.SLCon > 0)
+    ORDER BY l.MaThuoc, CASE WHEN l.SLCon > 0 THEN 0 ELSE 1 END, l.HanSD, l.MaLo;
+END
+GO
+
+-- ---------------------------------------------------------------------
+-- [10/11/2026 lần 5] Đặt mật khẩu (băm SHA-256 + salt ngẫu nhiên).
+-- App C# tự băm (BLL/BaoMatMatKhau.cs); proc này dùng khi cần đặt lại
+-- mật khẩu trực tiếp trong SSMS, vd: EXEC sp_DatMatKhau 'QL001', N'QL00111';
+-- ---------------------------------------------------------------------
+IF OBJECT_ID('sp_DatMatKhau', 'P') IS NOT NULL
+    DROP PROCEDURE sp_DatMatKhau;
+GO
+CREATE PROCEDURE sp_DatMatKhau
+    @MaNV    VARCHAR(10),
+    @MatKhau NVARCHAR(50),
+    @PhaiDoi BIT = 0
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Salt VARCHAR(32) = CONVERT(VARCHAR(32), CRYPT_GEN_RANDOM(16), 2);
+    UPDATE NhanVien
+    SET MatKhauSalt = @Salt,
+        MatKhauHash = CONVERT(VARCHAR(64), HASHBYTES('SHA2_256', CAST(@Salt AS NVARCHAR(32)) + @MatKhau), 2),
+        PhaiDoiMK   = @PhaiDoi,
+        YeuCauDoiMK = 0,
+        NgayYeuCauDoiMK = NULL
+    WHERE MaNV = @MaNV;
+END
+GO
 
 -- ---------------------------------------------------------------------
 -- Yêu cầu 4: tìm thuốc theo tên thuốc, thành phần hoặc công dụng
@@ -422,6 +967,7 @@ BEGIN
 
     SELECT
         t.*,
+        dbo.fn_SLBanDuoc(t.MaThuoc, CAST(GETDATE() AS DATE)) AS SLBanDuoc,   -- [10/11/2026 lần 5]
         STUFF((
             SELECT N', ' + cd.TenCongDung
             FROM Thuoc_CongDung tcd
@@ -609,7 +1155,7 @@ BEGIN
         LEFT JOIN KhachHang kh ON h.MaKhach = kh.MaKhach
         LEFT JOIN (SELECT MaHDB, SUM(SoLuong) AS TongSL, SUM(ThanhTien) AS TongCT
                    FROM ChiTietHDB GROUP BY MaHDB) ct ON ct.MaHDB = h.MaHDB
-        WHERE h.NgayBan >= @TuNgay AND h.NgayBan < @DenNgay
+        WHERE h.NgayBan >= @TuNgay AND h.NgayBan < @DenNgay AND h.DaHuy = 0
           AND (ct.MaHDB IS NOT NULL OR ISNULL(h.TongTien, 0) > 0)
     ) x
     ORDER BY STT;
@@ -646,7 +1192,7 @@ BEGIN
         FROM HoaDonBan h
         LEFT JOIN (SELECT MaHDB, SUM(ThanhTien) AS TongCT
                    FROM ChiTietHDB GROUP BY MaHDB) ct ON ct.MaHDB = h.MaHDB
-        WHERE h.NgayBan >= @TuNgay AND h.NgayBan < @DenNgay
+        WHERE h.NgayBan >= @TuNgay AND h.NgayBan < @DenNgay AND h.DaHuy = 0
           AND (ct.MaHDB IS NOT NULL OR ISNULL(h.TongTien, 0) > 0)
     ),
     DT AS (
@@ -777,9 +1323,11 @@ END
 GO
 
 -- ---------------------------------------------------------------------
--- Bổ sung: hủy toàn bộ thuốc đã hết hạn còn tồn kho
---   Đưa SLHienCo về 0 + ghi LichSuHuyThuoc, trong 1 transaction.
---   Trả về: SoThuocHuy, TongSLHuy, TongGiaTriHuy
+-- Bổ sung: hủy thuốc đã hết hạn còn tồn kho
+--   [10/11/2026 lần 5] HỦY THEO LÔ: chỉ đưa SLCon của các LÔ đã hết hạn về 0
+--   (lô còn hạn của cùng thuốc vẫn bán bình thường), ghi LichSuHuyThuoc
+--   từng lô (MaLo, SoLo), rồi đồng bộ lại Thuoc. Tất cả trong 1 transaction.
+--   Trả về: SoThuocHuy, TongSLHuy, TongGiaTriHuy (giống bản cũ -> C# không đổi)
 -- ---------------------------------------------------------------------
 IF OBJECT_ID('sp_HuyThuocHetHan', 'P') IS NOT NULL
     DROP PROCEDURE sp_HuyThuocHetHan;
@@ -794,8 +1342,9 @@ BEGIN
 
     DECLARE @HomNay DATE = CAST(GETDATE() AS DATE);
     DECLARE @DaHuy TABLE (
+        MaLo       INT,
         MaThuoc    VARCHAR(10),
-        TenThuoc   NVARCHAR(100),
+        SoLo       NVARCHAR(30),
         SoLuong    INT,
         HanSD      DATE,
         DonGiaNhap DECIMAL(18,2)
@@ -806,28 +1355,36 @@ BEGIN
 
     BEGIN TRANSACTION;
 
-        UPDATE Thuoc
-        SET SLHienCo = 0
-        OUTPUT deleted.MaThuoc, deleted.TenThuoc, deleted.SLHienCo, deleted.HanSD, deleted.DonGiaNhap
-        INTO @DaHuy (MaThuoc, TenThuoc, SoLuong, HanSD, DonGiaNhap)
-        WHERE SLHienCo > 0 AND HanSD < @HomNay;
+        EXEC sp_TaoLoTonDau NULL;      -- thuốc cũ chưa có lô
 
-        INSERT INTO LichSuHuyThuoc (MaThuoc, TenThuoc, SoLuongHuy, HanSD, DonGiaNhap, GiaTriHuy, NgayHuy, MaNV, LyDo)
-        SELECT MaThuoc, TenThuoc, SoLuong, HanSD, DonGiaNhap, SoLuong * DonGiaNhap, GETDATE(), @MaNV, @LyDo
-        FROM @DaHuy;
+        UPDATE LoThuoc
+        SET SLCon = 0
+        OUTPUT deleted.MaLo, deleted.MaThuoc, deleted.SoLo, deleted.SLCon, deleted.HanSD, deleted.DonGiaNhap
+        INTO @DaHuy (MaLo, MaThuoc, SoLo, SoLuong, HanSD, DonGiaNhap)
+        WHERE SLCon > 0 AND HanSD < @HomNay;
+
+        INSERT INTO LichSuHuyThuoc (MaThuoc, TenThuoc, SoLuongHuy, HanSD, DonGiaNhap, GiaTriHuy, NgayHuy, MaNV, LyDo, MaLo, SoLo)
+        SELECT d.MaThuoc, t.TenThuoc, d.SoLuong, d.HanSD, d.DonGiaNhap, d.SoLuong * d.DonGiaNhap,
+               GETDATE(), @MaNV, @LyDo, d.MaLo, d.SoLo
+        FROM @DaHuy d
+        JOIN Thuoc t ON t.MaThuoc = d.MaThuoc;
+
+        EXEC sp_DongBoThuocTuLo NULL;
 
     COMMIT TRANSACTION;
 
-    SELECT COUNT(*)                             AS SoThuocHuy,
+    SELECT COUNT(DISTINCT MaThuoc)              AS SoThuocHuy,
            ISNULL(SUM(SoLuong), 0)              AS TongSLHuy,
            ISNULL(SUM(SoLuong * DonGiaNhap), 0) AS TongGiaTriHuy
     FROM @DaHuy;
 END
 GO
 
+
 -- =====================================================================
 -- [10/11/2026 lần 3] CÁC PROC CHO DASHBOARD / BIỂU ĐỒ SO SÁNH
 -- Doanh thu luôn tính = SUM(ChiTietHDB.ThanhTien) giống các báo cáo 6-9.
+-- [10/11/2026 lần 5] mọi proc tính doanh thu bỏ hóa đơn đã hủy (h.DaHuy = 0).
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
@@ -851,16 +1408,16 @@ BEGIN
     SELECT
         (SELECT ISNULL(SUM(c.ThanhTien), 0)
            FROM ChiTietHDB c JOIN HoaDonBan h ON h.MaHDB = c.MaHDB
-          WHERE h.NgayBan >= @HomNay AND h.NgayBan < @NgayMai)            AS DoanhThuHomNay,
+          WHERE h.NgayBan >= @HomNay AND h.NgayBan < @NgayMai AND h.DaHuy = 0)            AS DoanhThuHomNay,
         (SELECT COUNT(DISTINCT c.MaHDB)
            FROM ChiTietHDB c JOIN HoaDonBan h ON h.MaHDB = c.MaHDB
-          WHERE h.NgayBan >= @HomNay AND h.NgayBan < @NgayMai)            AS SoHoaDonHomNay,
+          WHERE h.NgayBan >= @HomNay AND h.NgayBan < @NgayMai AND h.DaHuy = 0)            AS SoHoaDonHomNay,
         (SELECT ISNULL(SUM(c.ThanhTien), 0)
            FROM ChiTietHDB c JOIN HoaDonBan h ON h.MaHDB = c.MaHDB
-          WHERE h.NgayBan >= @DauThang AND h.NgayBan < @DauThangSau)      AS DoanhThuThangNay,
+          WHERE h.NgayBan >= @DauThang AND h.NgayBan < @DauThangSau AND h.DaHuy = 0)      AS DoanhThuThangNay,
         (SELECT COUNT(DISTINCT c.MaHDB)
            FROM ChiTietHDB c JOIN HoaDonBan h ON h.MaHDB = c.MaHDB
-          WHERE h.NgayBan >= @DauThang AND h.NgayBan < @DauThangSau)      AS SoHoaDonThangNay,
+          WHERE h.NgayBan >= @DauThang AND h.NgayBan < @DauThangSau AND h.DaHuy = 0)      AS SoHoaDonThangNay,
         (SELECT ISNULL(SUM(c.ThanhTien), 0)
            FROM ChiTietHDN c JOIN HoaDonNhap h ON h.MaHDN = c.MaHDN
           WHERE h.NgayNhap >= @DauThang AND h.NgayNhap < @DauThangSau)    AS TienNhapThangNay,
@@ -891,7 +1448,7 @@ BEGIN
     Ban AS (
         SELECT MONTH(h.NgayBan) AS Thang, SUM(c.ThanhTien) AS DoanhThu, COUNT(DISTINCT h.MaHDB) AS SoHoaDon
         FROM HoaDonBan h JOIN ChiTietHDB c ON c.MaHDB = h.MaHDB
-        WHERE h.NgayBan >= @TuNgay AND h.NgayBan < @DenNgay
+        WHERE h.NgayBan >= @TuNgay AND h.NgayBan < @DenNgay AND h.DaHuy = 0
         GROUP BY MONTH(h.NgayBan)
     ),
     Nhap AS (
@@ -934,7 +1491,7 @@ BEGIN
     FROM ChiTietHDB c
     JOIN HoaDonBan h ON h.MaHDB = c.MaHDB
     JOIN Thuoc t     ON t.MaThuoc = c.MaThuoc
-    WHERE h.NgayBan >= @TuNgay AND h.NgayBan < @DenNgay
+    WHERE h.NgayBan >= @TuNgay AND h.NgayBan < @DenNgay AND h.DaHuy = 0
     GROUP BY t.MaThuoc, t.TenThuoc
     ORDER BY SUM(c.SoLuong) DESC, SUM(c.ThanhTien) DESC;
 END
@@ -971,7 +1528,7 @@ BEGIN
         FROM HoaDonBan h
         LEFT JOIN (SELECT MaHDB, SUM(ThanhTien) AS TongCT
                    FROM ChiTietHDB GROUP BY MaHDB) ct ON ct.MaHDB = h.MaHDB
-        WHERE h.NgayBan >= @TuNgay AND h.NgayBan < @DenNgay
+        WHERE h.NgayBan >= @TuNgay AND h.NgayBan < @DenNgay AND h.DaHuy = 0
           AND (ct.MaHDB IS NOT NULL OR ISNULL(h.TongTien, 0) > 0)
     ),
     DT AS (
@@ -1011,7 +1568,7 @@ BEGIN
     FROM HoaDonBan h
     LEFT JOIN (SELECT MaHDB, SUM(ThanhTien) AS TongCT
                FROM ChiTietHDB GROUP BY MaHDB) ct ON ct.MaHDB = h.MaHDB
-    WHERE h.NgayBan >= @TuNgay AND h.NgayBan < @DenNgay
+    WHERE h.NgayBan >= @TuNgay AND h.NgayBan < @DenNgay AND h.DaHuy = 0
       AND (ct.MaHDB IS NOT NULL OR ISNULL(h.TongTien, 0) > 0)
     ORDER BY TongTien, h.NgayBan, h.MaHDB;
 END
@@ -1182,13 +1739,14 @@ IF NOT EXISTS (SELECT 1 FROM TrinhDo WHERE MaTrinhDo = 'TD03')
 IF NOT EXISTS (SELECT 1 FROM ChuyenMon WHERE MaChuyenMon = 'CM03')
     INSERT INTO ChuyenMon (MaChuyenMon, TenChuyenMon) VALUES ('CM03', N'Quản lý cửa hàng');
 
--- Nhân viên mới: 1 thủ kho, 1 quản lý (mật khẩu = mã NV + '11')
+-- Nhân viên mới: 1 thủ kho, 1 quản lý (mật khẩu = mã NV + '11', băm ở dưới)
+-- [10/11/2026 lần 5] bỏ cột MatKhau khỏi câu INSERT (mật khẩu không còn lưu chữ thường)
 IF NOT EXISTS (SELECT 1 FROM NhanVien WHERE MaNV = 'TK001')
-    INSERT INTO NhanVien (MaNV, TenNV, NgaySinh, GioiTinh, DiaChi, MaTrinhDo, MaChuyenMon, DienThoai, MatKhau, MaVaiTro)
-    VALUES ('TK001', N'Phạm Văn Kho', '1992-07-12', N'Nam', N'Hà Nội', 'TD02', 'CM02', '0912000001', N'TK00111', 'TK');
+    INSERT INTO NhanVien (MaNV, TenNV, NgaySinh, GioiTinh, DiaChi, MaTrinhDo, MaChuyenMon, DienThoai, MaVaiTro)
+    VALUES ('TK001', N'Phạm Văn Kho', '1992-07-12', N'Nam', N'Hà Nội', 'TD02', 'CM02', '0912000001', 'TK');
 IF NOT EXISTS (SELECT 1 FROM NhanVien WHERE MaNV = 'QL001')
-    INSERT INTO NhanVien (MaNV, TenNV, NgaySinh, GioiTinh, DiaChi, MaTrinhDo, MaChuyenMon, DienThoai, MatKhau, MaVaiTro)
-    VALUES ('QL001', N'Hoàng Thị Quản Lý', '1988-09-20', N'Nữ', N'Hà Nội', 'TD01', 'CM03', '0912000002', N'QL00111', 'QL');
+    INSERT INTO NhanVien (MaNV, TenNV, NgaySinh, GioiTinh, DiaChi, MaTrinhDo, MaChuyenMon, DienThoai, MaVaiTro)
+    VALUES ('QL001', N'Hoàng Thị Quản Lý', '1988-09-20', N'Nữ', N'Hà Nội', 'TD01', 'CM03', '0912000002', 'QL');
 
 -- [10/11/2026 lần 4] Gán vai trò cho NV chưa có vai trò THEO TIỀN TỐ MÃ NV
 --   QLxxx = Quản lý | TKxxx = Thủ kho | NVxx và mã khác = Bán hàng
@@ -1203,9 +1761,19 @@ WHERE MaVaiTro IS NULL;
 UPDATE NhanVien SET MaVaiTro = 'BH' WHERE MaNV IN ('NV01', 'NV03') AND MaVaiTro IN ('QL', 'TK');
 
 -- Mật khẩu mặc định cho NV chưa có mật khẩu: mã NV + '11'
+-- [10/11/2026 lần 5] lưu dạng băm: Hash = SHA-256(Salt + mật khẩu), Salt ngẫu nhiên từng NV
+--   (NEWID() sinh khác nhau trên từng dòng; app C# băm giống hệt để so khi đăng nhập)
 UPDATE NhanVien
-SET MatKhau = RTRIM(MaNV) + N'11'
-WHERE MatKhau IS NULL OR LTRIM(RTRIM(MatKhau)) = N'';
+SET MatKhauSalt = CONVERT(VARCHAR(32), CAST(NEWID() AS BINARY(16)), 2)
+WHERE MatKhauHash IS NULL;
+
+UPDATE NhanVien
+SET MatKhauHash = CONVERT(VARCHAR(64),
+        HASHBYTES('SHA2_256', CAST(MatKhauSalt AS NVARCHAR(32)) + CAST(RTRIM(MaNV) AS NVARCHAR(10)) + N'11'), 2)
+WHERE MatKhauHash IS NULL;
+
+-- [10/11/2026 lần 5] Thuốc kê đơn mẫu: kháng sinh Amoxicillin
+UPDATE Thuoc SET KeDon = 1 WHERE MaThuoc = 'TH010' AND TenThuoc LIKE N'%Amoxicillin%' AND KeDon = 0;
 
 -- Mã vạch mẫu (chỉ gán khi thuốc chưa có mã vạch và mã vạch chưa bị dùng)
 UPDATE t
@@ -1249,6 +1817,12 @@ UPDATE h SET TongTien = ct.Tong
 FROM HoaDonNhap h
 JOIN (SELECT MaHDN, SUM(ThanhTien) AS Tong FROM ChiTietHDN GROUP BY MaHDN) ct ON ct.MaHDN = h.MaHDN
 WHERE ISNULL(h.TongTien, 0) <> ct.Tong;
+GO
+
+-- [10/11/2026 lần 5] Tồn kho có từ trước (chưa có lô) -> lô "TON-DAU" với hạn SD cũ của thuốc,
+-- rồi đồng bộ SLHienCo / HanSD theo lô. Chạy lại không bị nhân đôi.
+EXEC sp_TaoLoTonDau NULL;
+EXEC sp_DongBoThuocTuLo NULL;
 GO
 
 PRINT N'=== Cài đặt CSDL QuanLyNhaThuoc hoàn tất ===';

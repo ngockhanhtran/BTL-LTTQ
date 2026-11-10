@@ -5,22 +5,25 @@ using QuanLyNhaThuoc.DTO;
 namespace QuanLyNhaThuoc.DAL
 {
     /// <summary>[10/11/2026] Đăng nhập, quên mật khẩu, quản lý nhân viên.</summary>
+    /// <remarks>[10/11/2026 lần 5] Mật khẩu lưu dạng băm (MatKhauHash + MatKhauSalt), danh sách NV không trả về mật khẩu.</remarks>
     public class NhanVienDAO
     {
-        private const string SQL_DANH_SACH = @"
+        private const string SQL_COT = @"
             SELECT nv.MaNV, nv.TenNV, nv.NgaySinh, nv.GioiTinh, nv.DienThoai, nv.DiaChi,
                    nv.MaTrinhDo, td.TenTrinhDo, nv.MaChuyenMon, cm.TenChuyenMon,
-                   nv.MaVaiTro, vt.TenVaiTro, nv.MatKhau,
-                   nv.YeuCauDoiMK, nv.NgayYeuCauDoiMK, nv.NghiViec
+                   nv.MaVaiTro, vt.TenVaiTro, nv.PhaiDoiMK,
+                   nv.YeuCauDoiMK, nv.NgayYeuCauDoiMK, nv.NghiViec";
+        private const string SQL_TU = @"
             FROM NhanVien nv
             LEFT JOIN TrinhDo td   ON td.MaTrinhDo   = nv.MaTrinhDo
             LEFT JOIN ChuyenMon cm ON cm.MaChuyenMon = nv.MaChuyenMon
             LEFT JOIN VaiTro vt    ON vt.MaVaiTro    = nv.MaVaiTro";
+        private const string SQL_DANH_SACH = SQL_COT + SQL_TU;
 
-        /// <summary>Thông tin tài khoản theo mã NV, null nếu không có.</summary>
+        /// <summary>Thông tin tài khoản theo mã NV (kèm MatKhauHash, MatKhauSalt để kiểm tra đăng nhập), null nếu không có.</summary>
         public DataRow LayTaiKhoan(string maNV)
         {
-            DataTable dt = SqlHelper.Query(SQL_DANH_SACH + " WHERE nv.MaNV = @MaNV",
+            DataTable dt = SqlHelper.Query(SQL_COT + ", nv.MatKhauHash, nv.MatKhauSalt" + SQL_TU + " WHERE nv.MaNV = @MaNV",
                                            SqlHelper.PChuoi("@MaNV", maNV));
             return dt.Rows.Count > 0 ? dt.Rows[0] : null;
         }
@@ -57,32 +60,40 @@ namespace QuanLyNhaThuoc.DAL
                 SqlHelper.PChuoi("@MaNV", maNV)) > 0;
         }
 
-        /// <summary>Đổi mật khẩu + xóa cờ yêu cầu quên mật khẩu.</summary>
-        public bool DoiMatKhau(string maNV, string matKhauMoi)
+        /// <summary>Đổi mật khẩu (đã băm) + xóa cờ yêu cầu quên mật khẩu.</summary>
+        /// <param name="phaiDoi">true = NV phải đổi mật khẩu ở lần đăng nhập tới (quản lý đặt lại)</param>
+        public bool DoiMatKhau(string maNV, string hash, string salt, bool phaiDoi)
         {
             return SqlHelper.NonQuery(
-                "UPDATE NhanVien SET MatKhau = @MatKhau, YeuCauDoiMK = 0, NgayYeuCauDoiMK = NULL WHERE MaNV = @MaNV",
-                SqlHelper.PChuoi("@MatKhau", matKhauMoi), SqlHelper.PChuoi("@MaNV", maNV)) > 0;
+                @"UPDATE NhanVien SET MatKhauHash = @Hash, MatKhauSalt = @Salt, PhaiDoiMK = @PhaiDoi,
+                         YeuCauDoiMK = 0, NgayYeuCauDoiMK = NULL
+                  WHERE MaNV = @MaNV",
+                SqlHelper.PChuoi("@Hash", hash), SqlHelper.PChuoi("@Salt", salt),
+                SqlHelper.P("@PhaiDoi", phaiDoi), SqlHelper.PChuoi("@MaNV", maNV)) > 0;
         }
 
         public void Them(NhanVienDTO nv)
         {
             SqlHelper.NonQuery(@"
                 INSERT INTO NhanVien (MaNV, TenNV, NgaySinh, GioiTinh, DiaChi, MaTrinhDo, MaChuyenMon, DienThoai,
-                                      MatKhau, MaVaiTro, YeuCauDoiMK, NgayYeuCauDoiMK, NghiViec)
+                                      MatKhauHash, MatKhauSalt, PhaiDoiMK, MaVaiTro, YeuCauDoiMK, NgayYeuCauDoiMK, NghiViec)
                 VALUES (@MaNV, @TenNV, @NgaySinh, @GioiTinh, @DiaChi, @MaTrinhDo, @MaChuyenMon, @DienThoai,
-                        @MatKhau, @MaVaiTro, 0, NULL, @NghiViec)",
+                        @MatKhauHash, @MatKhauSalt, @PhaiDoiMK, @MaVaiTro, 0, NULL, @NghiViec)",
                 ThamSo(nv));
         }
 
         /// <param name="xuLyYeuCau">true = xóa cờ "quên mật khẩu" (quản lý đã cấp lại mật khẩu)</param>
+        /// <remarks>[10/11/2026 lần 5] nv.MatKhauHash = null -> giữ mật khẩu cũ.</remarks>
         public void Sua(NhanVienDTO nv, bool xuLyYeuCau)
         {
             SqlHelper.NonQuery(@"
                 UPDATE NhanVien
                 SET TenNV = @TenNV, NgaySinh = @NgaySinh, GioiTinh = @GioiTinh, DiaChi = @DiaChi,
                     MaTrinhDo = @MaTrinhDo, MaChuyenMon = @MaChuyenMon, DienThoai = @DienThoai,
-                    MatKhau = @MatKhau, MaVaiTro = @MaVaiTro, NghiViec = @NghiViec,
+                    MatKhauHash = ISNULL(@MatKhauHash, MatKhauHash),
+                    MatKhauSalt = CASE WHEN @MatKhauHash IS NULL THEN MatKhauSalt ELSE @MatKhauSalt END,
+                    PhaiDoiMK   = CASE WHEN @MatKhauHash IS NULL THEN PhaiDoiMK ELSE @PhaiDoiMK END,
+                    MaVaiTro = @MaVaiTro, NghiViec = @NghiViec,
                     YeuCauDoiMK     = CASE WHEN @XuLy = 1 THEN 0    ELSE YeuCauDoiMK END,
                     NgayYeuCauDoiMK = CASE WHEN @XuLy = 1 THEN NULL ELSE NgayYeuCauDoiMK END
                 WHERE MaNV = @MaNV",
@@ -148,7 +159,9 @@ namespace QuanLyNhaThuoc.DAL
                 SqlHelper.P("@MaTrinhDo", nv.MaTrinhDo),
                 SqlHelper.P("@MaChuyenMon", nv.MaChuyenMon),
                 SqlHelper.P("@DienThoai", nv.DienThoai),
-                SqlHelper.PChuoi("@MatKhau", nv.MatKhau),
+                SqlHelper.P("@MatKhauHash", nv.MatKhauHash),
+                SqlHelper.P("@MatKhauSalt", nv.MatKhauSalt),
+                SqlHelper.P("@PhaiDoiMK", nv.PhaiDoiMK),
                 SqlHelper.P("@MaVaiTro", nv.MaVaiTro),
                 SqlHelper.P("@NghiViec", nv.NghiViec)
             };

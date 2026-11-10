@@ -17,6 +17,7 @@ namespace QuanLyNhaThuoc.DTO
         public string MaNuocSX { get; set; }
         public DateTime? HanSD { get; set; }
         public string ChongChiDinh { get; set; }
+        public bool KeDon { get; set; }              // [10/11/2026 lần 5] thuốc kê đơn
 
         /// <summary>Danh sách MaCongDung của thuốc.</summary>
         public List<string> CongDung { get; set; } = new List<string>();
@@ -34,5 +35,7 @@ namespace QuanLyNhaThuoc.DTO
         public decimal GiaBan { get; set; }
         public int SLHienCo { get; set; }
         public DateTime? HanSD { get; set; }
+        public int SLBanDuoc { get; set; }           // [10/11/2026 lần 5] SL các lô CÒN HẠN (bán theo FEFO)
+        public bool KeDon { get; set; }              // [10/11/2026 lần 5]
     }
 }

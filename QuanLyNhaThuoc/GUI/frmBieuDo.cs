@@ -12,39 +12,15 @@ namespace QuanLyNhaThuoc.GUI
     /// - Báo cáo Y/C 9: doanh thu tất cả nhân viên trong quý, 2 NV thấp nhất tô đỏ, có đường trung bình.
     /// Có nút lưu biểu đồ ra ảnh PNG.
     /// </summary>
-    public class frmBieuDo : Form
+    /// [10/11/2026 lần 5] Giao diện thiết kế bằng Designer (frmBieuDo.Designer.cs): Chart có sẵn ChartArea / Legend "Default".
+    public partial class frmBieuDo : Form
     {
-        private readonly Chart chart;
-
         private frmBieuDo(string tieuDe)
         {
-            this.AutoScaleDimensions = new SizeF(96F, 96F);
-            this.AutoScaleMode = AutoScaleMode.Dpi;
+            InitializeComponent();
             this.Text = tieuDe;
-            this.StartPosition = FormStartPosition.CenterParent;
-            this.Size = new Size(900, 560);
-            this.MinimizeBox = false;
-            this.ShowInTaskbar = false;
-            this.BackColor = Color.White;
-
-            chart = BieuDoHelper.TaoChart(tieuDe);
-
-            Panel pnlDuoi = new Panel() { Dock = DockStyle.Bottom, Height = 50, BackColor = Color.FromArgb(244, 246, 249) };
-            Button btnLuuAnh = GiaoDien.TaoNut("💾 Lưu ảnh PNG", GiaoDien.MauXanhLa, 150, 34);
-            btnLuuAnh.Left = 12; btnLuuAnh.Top = 8;
-            btnLuuAnh.Click += (s, e) => LuuAnh();
-            Button btnDong = GiaoDien.TaoNut("Đóng", GiaoDien.MauXam, 100, 34);
-            btnDong.Top = 8;
-            btnDong.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnDong.Left = pnlDuoi.Width - 112;
-            btnDong.DialogResult = DialogResult.Cancel;
-            pnlDuoi.Controls.Add(btnLuuAnh);
-            pnlDuoi.Controls.Add(btnDong);
-            pnlDuoi.Resize += (s, e) => btnDong.Left = pnlDuoi.ClientSize.Width - 112;
-
-            this.Controls.Add(chart);
-            this.Controls.Add(pnlDuoi);
-            this.CancelButton = btnDong;
+            chart.Titles[0].Text = tieuDe;
+            btnLuuAnh.Tag = btnLuuAnh.BackColor;
         }
 
         /// <summary>Biểu đồ so sánh cho báo cáo Y/C 9 (Top 2 NV bán ít nhất theo quý).</summary>
@@ -67,7 +43,7 @@ namespace QuanLyNhaThuoc.GUI
             }
         }
 
-        private void LuuAnh()
+        private void btnLuuAnh_Click(object sender, EventArgs e)
         {
             using (SaveFileDialog sfd = new SaveFileDialog() { Filter = "Ảnh PNG (*.png)|*.png", FileName = "BieuDo_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + ".png" })
             {

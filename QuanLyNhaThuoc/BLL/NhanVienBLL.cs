@@ -7,6 +7,11 @@ using QuanLyNhaThuoc.DTO;
 namespace QuanLyNhaThuoc.BLL
 {
     /// <summary>[10/11/2026] Nghiệp vụ đăng nhập, quên / đổi mật khẩu, quản lý nhân viên.</summary>
+    /// <remarks>
+    /// [10/11/2026 lần 5] Mật khẩu băm SHA-256 + salt (BaoMatMatKhau). Quản lý không xem được mật khẩu,
+    /// chỉ ĐẶT LẠI; NV được đặt lại / NV mới phải đổi mật khẩu ở lần đăng nhập đầu (PhaiDoiMK).
+    /// Ghi nhật ký: đăng nhập (đúng / sai), đổi mật khẩu, quên mật khẩu, thêm / sửa / xóa NV.
+    /// </remarks>
     public class NhanVienBLL
     {
         public const int DO_DAI_MK_TOI_THIEU = 6;
@@ -34,16 +39,38 @@ namespace QuanLyNhaThuoc.BLL
             if (r == null) { loi = "Mã nhân viên không tồn tại."; return false; }
             if (Convert.ToBoolean(r["NghiViec"])) { loi = "Tài khoản đã bị khóa (nhân viên đã nghỉ việc)."; return false; }
 
-            string mkDung = r["MatKhau"] == DBNull.Value ? "" : r["MatKhau"].ToString();
-            if (mkDung == "") { loi = "Tài khoản chưa có mật khẩu. Vui lòng liên hệ quản lý."; return false; }
-            if (!string.Equals(mkDung, matKhau, StringComparison.Ordinal)) { loi = "Mật khẩu không đúng."; return false; }
+            // [10/11/2026 lần 5] so sánh bản băm, không còn so chuỗi mật khẩu
+            string hash = Chuoi(r, "MatKhauHash"), salt = Chuoi(r, "MatKhauSalt");
+            if (hash == "") { loi = "Tài khoản chưa có mật khẩu. Vui lòng liên hệ quản lý."; return false; }
+            if (!BaoMatMatKhau.KiemTra(matKhau, salt, hash))
+            {
+                NhatKyBLL.GhiCho(r["MaNV"].ToString(), r["TenNV"].ToString(), NhatKyBLL.DANG_NHAP_SAI, r["MaNV"].ToString(), "Sai mật khẩu");
+                loi = "Mật khẩu không đúng.";
+                return false;
+            }
 
             string vaiTro = r["MaVaiTro"] == DBNull.Value ? "" : r["MaVaiTro"].ToString().Trim();
             if (vaiTro == "") { loi = "Tài khoản chưa được phân quyền. Vui lòng liên hệ quản lý."; return false; }
 
             PhienDangNhap.DangNhap(r["MaNV"].ToString(), r["TenNV"].ToString(), vaiTro,
                                    r["TenVaiTro"] == DBNull.Value ? vaiTro : r["TenVaiTro"].ToString());
+            PhienDangNhap.PhaiDoiMK = r["PhaiDoiMK"] != DBNull.Value && Convert.ToBoolean(r["PhaiDoiMK"]);
+            NhatKyBLL.Ghi(NhatKyBLL.DANG_NHAP, PhienDangNhap.MaNV, "Vai trò: " + PhienDangNhap.TenVaiTro);
             return true;
+        }
+
+        /// <summary>[10/11/2026 lần 5] Ghi nhật ký trước khi xóa phiên đăng nhập.</summary>
+        public void DangXuat()
+        {
+            if (PhienDangNhap.DaDangNhap)
+                NhatKyBLL.Ghi(NhatKyBLL.DANG_XUAT, PhienDangNhap.MaNV, "Thời gian làm việc: " +
+                              Math.Round((DateTime.Now - PhienDangNhap.ThoiDiemDangNhap).TotalMinutes) + " phút");
+            PhienDangNhap.DangXuat();
+        }
+
+        private static string Chuoi(DataRow r, string cot)
+        {
+            return r[cot] == DBNull.Value ? "" : r[cot].ToString().Trim();
         }
 
         // ===================== QUÊN / ĐỔI MẬT KHẨU =====================
@@ -70,6 +97,7 @@ namespace QuanLyNhaThuoc.BLL
             }
 
             dao.GuiYeuCauQuenMatKhau(maNV);
+            NhatKyBLL.GhiCho(maNV, r["TenNV"].ToString(), NhatKyBLL.QUEN_MAT_KHAU, maNV, "Gửi yêu cầu cấp lại mật khẩu");
             thongBao = "Đã gửi yêu cầu cấp lại mật khẩu tới quản lý.\nVui lòng liên hệ quản lý để nhận mật khẩu mới.";
             return true;
         }
@@ -79,13 +107,17 @@ namespace QuanLyNhaThuoc.BLL
         {
             DataRow r = dao.LayTaiKhoan(maNV);
             if (r == null) return "Không tìm thấy tài khoản.";
-            string mkDung = r["MatKhau"] == DBNull.Value ? "" : r["MatKhau"].ToString();
-            if (!string.Equals(mkDung, matKhauCu ?? "", StringComparison.Ordinal)) return "Mật khẩu hiện tại không đúng.";
+            string hash = Chuoi(r, "MatKhauHash"), salt = Chuoi(r, "MatKhauSalt");
+            if (!BaoMatMatKhau.KiemTra(matKhauCu ?? "", salt, hash)) return "Mật khẩu hiện tại không đúng.";
             string loi = KiemTraMatKhau(matKhauMoi);
             if (loi != null) return loi;
             if (matKhauMoi != nhapLai) return "Nhập lại mật khẩu mới không khớp.";
-            if (matKhauMoi == mkDung) return "Mật khẩu mới phải khác mật khẩu hiện tại.";
-            dao.DoiMatKhau(maNV, matKhauMoi);
+            if (matKhauMoi == matKhauCu) return "Mật khẩu mới phải khác mật khẩu hiện tại.";
+            if (matKhauMoi == MatKhauMacDinh(maNV)) return "Không dùng mật khẩu mặc định (mã NV + 11), hãy đặt mật khẩu riêng.";
+            string saltMoi = BaoMatMatKhau.TaoSalt();
+            dao.DoiMatKhau(maNV, BaoMatMatKhau.Bam(matKhauMoi, saltMoi), saltMoi, false);
+            if (string.Equals(maNV, PhienDangNhap.MaNV, StringComparison.OrdinalIgnoreCase)) PhienDangNhap.PhaiDoiMK = false;
+            NhatKyBLL.Ghi(NhatKyBLL.DOI_MAT_KHAU, maNV, "Tự đổi mật khẩu");
             return null;
         }
 
@@ -117,7 +149,23 @@ namespace QuanLyNhaThuoc.BLL
         {
             KiemTra(nv, true);
             if (dao.TonTai(nv.MaNV)) throw new ArgumentException("Mã nhân viên " + nv.MaNV + " đã tồn tại.");
+            GanMatKhau(nv, true);          // NV mới phải đổi mật khẩu khi đăng nhập lần đầu
             dao.Them(nv);
+            NhatKyBLL.Ghi(NhatKyBLL.NHAN_VIEN, nv.MaNV, "Thêm nhân viên " + nv.TenNV + " (vai trò " + nv.MaVaiTro + ")");
+        }
+
+        /// <summary>[10/11/2026 lần 5] Băm mật khẩu mới (nếu có) vào DTO; xóa chữ thường khỏi DTO.</summary>
+        private static void GanMatKhau(NhanVienDTO nv, bool phaiDoi)
+        {
+            if (string.IsNullOrEmpty(nv.MatKhau))
+            {
+                nv.MatKhauHash = null;
+                nv.MatKhauSalt = null;
+                return;
+            }
+            nv.MatKhauSalt = BaoMatMatKhau.TaoSalt();
+            nv.MatKhauHash = BaoMatMatKhau.Bam(nv.MatKhau, nv.MatKhauSalt);
+            nv.PhaiDoiMK = phaiDoi;
         }
 
         /// <param name="xuLyYeuCau">true = đánh dấu đã cấp lại mật khẩu cho NV đang yêu cầu</param>
@@ -139,7 +187,19 @@ namespace QuanLyNhaThuoc.BLL
             if (dangLaQL && !sauKhiSuaLaQL && dao.DemQuanLyDangLam(nv.MaNV) == 0)
                 throw new ArgumentException("Phải còn ít nhất 1 quản lý đang làm việc.");
 
+            // [10/11/2026 lần 5] có nhập mật khẩu mới = đặt lại mật khẩu; NV khác phải đổi khi đăng nhập
+            bool datLaiMK = !string.IsNullOrEmpty(nv.MatKhau);
+            GanMatKhau(nv, !laChinhMinh);
             dao.Sua(nv, xuLyYeuCau);
+            if (laChinhMinh && datLaiMK) PhienDangNhap.PhaiDoiMK = false;
+
+            NhatKyBLL.Ghi(NhatKyBLL.NHAN_VIEN, nv.MaNV, "Sửa thông tin nhân viên " + nv.TenNV +
+                          (nv.NghiViec ? " (đã nghỉ việc)" : ""));
+            if (datLaiMK)
+                NhatKyBLL.Ghi(NhatKyBLL.DAT_LAI_MAT_KHAU, nv.MaNV,
+                              xuLyYeuCau ? "Cấp lại mật khẩu theo yêu cầu quên mật khẩu" : "Đặt lại mật khẩu");
+            else if (xuLyYeuCau)
+                NhatKyBLL.Ghi(NhatKyBLL.DAT_LAI_MAT_KHAU, nv.MaNV, "Đánh dấu đã xử lý yêu cầu (giữ mật khẩu cũ)");
         }
 
         /// <summary>
@@ -152,6 +212,7 @@ namespace QuanLyNhaThuoc.BLL
             try
             {
                 dao.Xoa(maNV);
+                NhatKyBLL.Ghi(NhatKyBLL.NHAN_VIEN, maNV, "Xóa nhân viên");
                 return true;
             }
             catch (Exception ex)
@@ -165,6 +226,7 @@ namespace QuanLyNhaThuoc.BLL
         {
             KiemTraTruocKhiKhoa(maNV);
             dao.DatNghiViec(maNV, true);
+            NhatKyBLL.Ghi(NhatKyBLL.NHAN_VIEN, maNV, "Chuyển sang nghỉ việc (khóa đăng nhập)");
         }
 
         private void KiemTraTruocKhiKhoa(string maNV)
@@ -193,8 +255,12 @@ namespace QuanLyNhaThuoc.BLL
             if (nv.DiaChi != null && nv.DiaChi.Trim().Length > 255) throw new ArgumentException("Địa chỉ tối đa 255 ký tự.");
             if (nv.NgaySinh.HasValue && nv.NgaySinh.Value.Date > DateTime.Today.AddYears(-15))
                 throw new ArgumentException("Ngày sinh không hợp lệ (nhân viên phải từ 15 tuổi trở lên).");
-            string loi = KiemTraMatKhau(nv.MatKhau);
-            if (loi != null) throw new ArgumentException(loi);
+            // [10/11/2026 lần 5] thêm mới: bắt buộc có mật khẩu; sửa: để trống = giữ mật khẩu cũ
+            if (themMoi || !string.IsNullOrEmpty(nv.MatKhau))
+            {
+                string loi = KiemTraMatKhau(nv.MatKhau);
+                if (loi != null) throw new ArgumentException(loi);
+            }
         }
 
         private static string ChiLaySo(string s)

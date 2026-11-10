@@ -7,30 +7,27 @@ using QuanLyNhaThuoc.DTO;
 
 namespace QuanLyNhaThuoc.GUI
 {
+    // Giao diện thiết kế bằng Designer (frmThuoc.Designer.cs).
     // [10/11/2026] Phân quyền:
     //   - Quản lý / Thủ kho: được sửa CÔNG DỤNG (nút "Sửa công dụng...") và CHỐNG CHỈ ĐỊNH (nút "Lưu chống chỉ định").
     //   - Bán hàng: chỉ xem (như trước).
-    //   - Phần "Lập hóa đơn bán" chỉ hiện cho Quản lý / Bán hàng (thủ kho không bán hàng).
+    //   - Phần "Lập hóa đơn bán" (pnlHoaDon) chỉ hiện cho Quản lý / Bán hàng (thủ kho không bán hàng).
     //   - Không cho thêm thuốc đã HẾT HẠN vào hóa đơn.
     //   - Tiêu đề cột của lưới hiển thị tiếng Việt.
+    // [10/11/2026 lần 5] Quản lý theo LÔ: chỉ bán số lượng CÒN HẠN (cột "SL bán được"), nút "Xem các lô";
+    //   thuốc kê đơn (℞) được đánh dấu để trang Bán hàng yêu cầu mã đơn thuốc.
     public partial class frmThuoc : Form
     {
         private readonly ThuocBLL thuocBLL = new ThuocBLL();
         private readonly HoaDonBanBLL hdbBLL = new HoaDonBanBLL();
 
-        private DataGridView dgvThuoc;
-        private TextBox txtTuKhoa;
-        private TextBox txtMaThuoc, txtTenThuoc, txtThanhPhan, txtGiaNhap, txtGiaBan, txtSLHienCo, txtCongDung, txtChongChiDinh;
-        private Label lblMaHDB, lblGioHang;
-        private NumericUpDown nudSoLuong;
-        private Button btnTimKiem, btnLamMoi, btnThemVaoHD, btnThanhToanHD;
-        private Button btnSuaCongDung, btnLuuCCD;                // [10/11/2026]
-
         // Thuốc đang chọn trên lưới
         private string maThuocChon, tenThuocChon;
         private decimal giaBanChon;
         private int slTonChon;
-        private DateTime? hanSDChon;                             // [10/11/2026]
+        private int slBanDuocChon;         // [10/11/2026 lần 5] SL các lô còn hạn
+        private bool keDonChon;            // [10/11/2026 lần 5]
+        private DateTime? hanSDChon;
 
         // Hóa đơn đang lập (chưa lưu DB cho tới khi thanh toán xong)
         private HoaDonTam hoaDonHienTai;
@@ -52,181 +49,62 @@ namespace QuanLyNhaThuoc.GUI
             { "MaDVT", "ĐVT" }, { "MaDangDC", "Dạng ĐC" }, { "ThanhPhan", "Thành phần" },
             { "DonGiaNhap", "Giá nhập" }, { "GiaBan", "Giá bán" }, { "SLHienCo", "SL hiện có" },
             { "NgaySX", "Ngày SX" }, { "MaNuocSX", "Nước SX" }, { "HanSD", "Hạn SD" },
-            { "ChongChiDinh", "Chống chỉ định" }, { "CongDung", "Công dụng" }
+            { "ChongChiDinh", "Chống chỉ định" }, { "CongDung", "Công dụng" },
+            { "SLBanDuoc", "SL bán được" }, { "KeDon", "Kê đơn" }      // [10/11/2026 lần 5]
         };
 
         public frmThuoc()
         {
-            this.AutoScaleDimensions = new SizeF(96F, 96F);
-            this.AutoScaleMode = AutoScaleMode.Dpi;
-
-            this.Text = "Tra cứu Thuốc";
-            InitializeComponentCustom();
+            InitializeComponent();
+            this.Dock = DockStyle.Fill;
+            ApDungPhanQuyen();
             LoadData();
             if (choBanHang) KhoiTaoHoaDonMoi();
-
-            // Quay lại trang này thì nạp lại tồn kho mới nhất
-            this.VisibleChanged += (s, e) => { if (this.Visible) TaiLai(maThuocChon); };
         }
 
-        private void InitializeComponentCustom()
+        // [10/11/2026] Ẩn / hiện theo vai trò (Designer đặt sẵn tất cả)
+        private void ApDungPhanQuyen()
         {
-            this.SuspendLayout();
-
-            this.BackColor = Color.FromArgb(244, 246, 249);
-            this.Dock = DockStyle.Fill;
-
-            Panel pnlLeft = new Panel() { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(15) };
-            Panel pnlRight = new Panel() { Dock = DockStyle.Right, Width = 380, BackColor = Color.White, Padding = new Padding(15), AutoScroll = true };
-
-            // PANEL TRÁI: tìm kiếm dock Top, lưới dock Fill
-            Panel pnlSearch = new Panel() { Dock = DockStyle.Top, Height = 70 };
-            Label lblSearch = new Label() { Text = "Tra cứu thuốc (Tên/Thành phần/Công dụng):", Font = new Font("Segoe UI", 9, FontStyle.Bold), Left = 0, Top = 0, AutoSize = true };
-            txtTuKhoa = new TextBox() { Left = 0, Top = 27, Width = 320, Font = new Font("Segoe UI", 10) };
-            txtTuKhoa.KeyDown += (s, e) =>
-            {
-                if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; TimKiem(); }
-            };
-            btnTimKiem = new Button() { Text = "Tìm kiếm", Left = 330, Top = 25, Width = 90, Height = 30, BackColor = Color.FromArgb(0, 122, 204), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
-            btnTimKiem.Click += (s, e) => TimKiem();
-            btnLamMoi = new Button() { Text = "Làm mới", Left = 430, Top = 25, Width = 90, Height = 30, BackColor = Color.FromArgb(108, 117, 125), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
-            btnLamMoi.Click += (s, e) => { txtTuKhoa.Clear(); LoadData(); };
-            pnlSearch.Controls.Add(lblSearch);
-            pnlSearch.Controls.Add(txtTuKhoa);
-            pnlSearch.Controls.Add(btnTimKiem);
-            pnlSearch.Controls.Add(btnLamMoi);
-
-            dgvThuoc = new DataGridView()
-            {
-                Dock = DockStyle.Fill,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                ReadOnly = true,
-                AllowUserToAddRows = false,
-                AllowUserToDeleteRows = false,
-                MultiSelect = false,
-                RowHeadersVisible = false,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                BackgroundColor = Color.White
-            };
-            dgvThuoc.SelectionChanged += DgvThuoc_SelectionChanged;
-            // [10/11/2026] tiêu đề cột tiếng Việt + định dạng tiền / ngày
-            dgvThuoc.DataBindingComplete += (s, e) =>
-                GiaoDien.DinhDangCot(dgvThuoc, TEN_COT, null, new[] { "DonGiaNhap", "GiaBan" }, new[] { "NgaySX", "HanSD" });
-
-            pnlLeft.Controls.Add(dgvThuoc);
-            pnlLeft.Controls.Add(pnlSearch);
-
-            // PANEL PHẢI: THÔNG TIN CHI TIẾT
-            Label lblFormTitle = new Label() { Text = "Thông Tin Chi Tiết Thuốc", Font = new Font("Segoe UI", 11, FontStyle.Bold), Left = 15, Top = 15, AutoSize = true };
-            pnlRight.Controls.Add(lblFormTitle);
-
-            int y = 55;
-            txtMaThuoc = AddInfo(pnlRight, "Mã thuốc:", ref y, false);
-            txtTenThuoc = AddInfo(pnlRight, "Tên thuốc:", ref y, false);
-            txtThanhPhan = AddInfo(pnlRight, "Thành phần:", ref y, true);
-            txtGiaNhap = AddInfo(pnlRight, "Giá nhập:", ref y, false);
-            txtGiaBan = AddInfo(pnlRight, "Giá bán:", ref y, false);
-            txtSLHienCo = AddInfo(pnlRight, "SL hiện có:", ref y, false);
-            txtCongDung = AddInfo(pnlRight, "Công dụng:", ref y, true);
-            txtChongChiDinh = AddInfo(pnlRight, "Chống chỉ định:", ref y, true);
-
-            // [10/11/2026] Quản lý / Thủ kho: sửa công dụng + chống chỉ định
+            btnSuaCongDung.Visible = choSuaThongTin;
+            btnLuuCCD.Visible = choSuaThongTin;
             if (choSuaThongTin)
             {
                 GiaoDien.DatChiDoc(txtChongChiDinh, false);
                 txtChongChiDinh.MaxLength = 255;
-
-                btnSuaCongDung = CreateButton("✎ Sửa công dụng...", 15, y, 160, Color.FromArgb(0, 122, 204));
-                btnSuaCongDung.Click += BtnSuaCongDung_Click;
-                btnLuuCCD = CreateButton("💾 Lưu chống chỉ định", 185, y, 160, Color.FromArgb(40, 167, 69));
-                btnLuuCCD.Click += BtnLuuCCD_Click;
-                pnlRight.Controls.Add(btnSuaCongDung);
-                pnlRight.Controls.Add(btnLuuCCD);
-                y += 46;
             }
-
-            // PHẦN LẬP HÓA ĐƠN (chỉ Quản lý / Bán hàng)
-            if (choBanHang)
+            else
             {
-                Label sep = new Label() { Left = 15, Top = y + 2, Width = 330, Height = 2, BorderStyle = BorderStyle.Fixed3D };
-                pnlRight.Controls.Add(sep);
-                y += 15;
-
-                Label lblHDTitle = new Label() { Text = "Lập hóa đơn bán", Font = new Font("Segoe UI", 10, FontStyle.Bold), Left = 15, Top = y, AutoSize = true };
-                pnlRight.Controls.Add(lblHDTitle);
-                y += 28;
-
-                // Label 1: mã hóa đơn sinh tự động
-                lblMaHDB = new Label() { Left = 15, Top = y, Width = 330, Height = 22, Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = Color.FromArgb(0, 122, 204) };
-                pnlRight.Controls.Add(lblMaHDB);
-                y += 32;
-
-                // Label 2: số lượng thuốc muốn thêm
-                Label lblSL = new Label() { Text = "Số lượng:", Left = 15, Top = y + 3, Width = 98, Font = new Font("Segoe UI", 9) };
-                nudSoLuong = new NumericUpDown() { Left = 115, Top = y, Width = 100, Minimum = 1, Maximum = 100000, Value = 1, Font = new Font("Segoe UI", 10) };
-                pnlRight.Controls.Add(lblSL);
-                pnlRight.Controls.Add(nudSoLuong);
-                y += 40;
-
-                btnThemVaoHD = CreateButton("Thêm vào hóa đơn", 15, y, 330, Color.FromArgb(40, 167, 69));
-                btnThemVaoHD.Click += BtnThemVaoHD_Click;
-                pnlRight.Controls.Add(btnThemVaoHD);
-                y += 46;
-
-                btnThanhToanHD = CreateButton("Thanh toán với hóa đơn", 15, y, 330, Color.FromArgb(0, 122, 204));
-                btnThanhToanHD.Click += BtnThanhToanHD_Click;
-                pnlRight.Controls.Add(btnThanhToanHD);
-                y += 48;
-
-                lblGioHang = new Label() { Left = 15, Top = y, Width = 330, Height = 40, Font = new Font("Segoe UI", 9, FontStyle.Italic), ForeColor = Color.DimGray };
-                pnlRight.Controls.Add(lblGioHang);
+                pnlHoaDon.Top -= 46;   // không có hàng nút sửa -> dời phần hóa đơn lên (giống bố cục cũ)
             }
-
-            // Fill thêm trước => dock sau cùng, nằm gọn bên trái panel phải
-            this.Controls.Add(pnlLeft);
-            this.Controls.Add(pnlRight);
-
-            this.ResumeLayout(false);
-            this.PerformLayout();
+            pnlHoaDon.Visible = choBanHang;
         }
 
-        private TextBox AddInfo(Panel pnl, string labelText, ref int y, bool nhieuDong)
+        // Quay lại trang này thì nạp lại tồn kho mới nhất
+        private void frmThuoc_VisibleChanged(object sender, EventArgs e)
         {
-            int cao = nhieuDong ? 52 : 25;
-            Label lbl = new Label() { Text = labelText, Left = 15, Top = y + 3, Width = 98, Font = new Font("Segoe UI", 9) };
-            TextBox txt = new TextBox()
-            {
-                Left = 115,
-                Top = y,
-                Width = 230,
-                Font = new Font("Segoe UI", 10),
-                ReadOnly = true,
-                TabStop = false,
-                BackColor = Color.FromArgb(248, 249, 250),
-                Multiline = nhieuDong,
-                ScrollBars = nhieuDong ? ScrollBars.Vertical : ScrollBars.None
-            };
-            if (nhieuDong) txt.Height = cao;
-            pnl.Controls.Add(lbl);
-            pnl.Controls.Add(txt);
-            y += cao + 12;
-            return txt;
+            if (this.Visible) TaiLai(maThuocChon);
         }
 
-        private Button CreateButton(string text, int left, int top, int width, Color color)
+        private void txtTuKhoa_KeyDown(object sender, KeyEventArgs e)
         {
-            return new Button()
-            {
-                Text = text,
-                Left = left,
-                Top = top,
-                Width = width,
-                Height = 38,
-                BackColor = color,
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                FlatStyle = FlatStyle.Flat
-            };
+            if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; TimKiem(); }
+        }
+
+        private void btnTimKiem_Click(object sender, EventArgs e)
+        {
+            TimKiem();
+        }
+
+        private void btnLamMoi_Click(object sender, EventArgs e)
+        {
+            txtTuKhoa.Clear();
+            LoadData();
+        }
+
+        // [10/11/2026] tiêu đề cột tiếng Việt + định dạng tiền / ngày
+        private void dgvThuoc_DataBindingComplete(object sender, DataGridViewBindingCompleteEventArgs e)
+        {
+            GiaoDien.DinhDangCot(dgvThuoc, TEN_COT, null, new[] { "DonGiaNhap", "GiaBan" }, new[] { "NgaySX", "HanSD" });
         }
 
         // ================== DỮ LIỆU THUỐC ==================
@@ -277,6 +155,8 @@ namespace QuanLyNhaThuoc.GUI
             tenThuocChon = Cell(row, "TenThuoc");
             decimal.TryParse(Cell(row, "GiaBan"), out giaBanChon);
             int.TryParse(Cell(row, "SLHienCo"), out slTonChon);
+            if (!int.TryParse(Cell(row, "SLBanDuoc"), out slBanDuocChon)) slBanDuocChon = slTonChon;
+            keDonChon = Cell(row, "KeDon") == "True";
             DateTime hsd;
             hanSDChon = DateTime.TryParse(Cell(row, "HanSD"), out hsd) ? hsd : (DateTime?)null;
 
@@ -285,7 +165,9 @@ namespace QuanLyNhaThuoc.GUI
             txtThanhPhan.Text = Cell(row, "ThanhPhan");
             txtGiaNhap.Text = DinhDangTien(Cell(row, "DonGiaNhap"));
             txtGiaBan.Text = DinhDangTien(Cell(row, "GiaBan"));
-            txtSLHienCo.Text = slTonChon.ToString();
+            txtSLHienCo.Text = slBanDuocChon == slTonChon ? slTonChon.ToString()
+                             : slTonChon + " (bán được " + slBanDuocChon + ")";
+            txtTenThuoc.Text = keDonChon ? "℞ " + tenThuocChon + " (kê đơn)" : tenThuocChon;
             // Tên cột công dụng trong CSDL có thể khác nhau -> thử vài tên thường gặp
             txtCongDung.Text = Cell(row, "CongDung", "SuDung", "CachDung", "CongDungThuoc");
             txtChongChiDinh.Text = Cell(row, "ChongChiDinh");
@@ -293,14 +175,14 @@ namespace QuanLyNhaThuoc.GUI
 
         private void XoaChiTiet()
         {
-            maThuocChon = null; tenThuocChon = null; giaBanChon = 0; slTonChon = 0; hanSDChon = null;
+            maThuocChon = null; tenThuocChon = null; giaBanChon = 0; slTonChon = 0; slBanDuocChon = 0; keDonChon = false; hanSDChon = null;
             txtMaThuoc.Clear(); txtTenThuoc.Clear(); txtThanhPhan.Clear(); txtGiaNhap.Clear();
             txtGiaBan.Clear(); txtSLHienCo.Clear(); txtCongDung.Clear(); txtChongChiDinh.Clear();
         }
 
         // ================== [10/11/2026] SỬA CÔNG DỤNG / CHỐNG CHỈ ĐỊNH ==================
 
-        private void BtnSuaCongDung_Click(object sender, EventArgs e)
+        private void btnSuaCongDung_Click(object sender, EventArgs e)
         {
             if (string.IsNullOrEmpty(maThuocChon))
             {
@@ -322,7 +204,7 @@ namespace QuanLyNhaThuoc.GUI
             catch (Exception ex) { GiaoDien.ThongBaoLoi(this, ex); }
         }
 
-        private void BtnLuuCCD_Click(object sender, EventArgs e)
+        private void btnLuuCCD_Click(object sender, EventArgs e)
         {
             if (string.IsNullOrEmpty(maThuocChon))
             {
@@ -337,6 +219,18 @@ namespace QuanLyNhaThuoc.GUI
                 MessageBox.Show("Đã lưu chống chỉ định cho thuốc " + ma + ".", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex) { GiaoDien.ThongBaoLoi(this, ex); }
+        }
+
+        // [10/11/2026 lần 5] các lô của thuốc đang chọn (thứ tự bán FEFO)
+        private void btnXemLo_Click(object sender, EventArgs e)
+        {
+            if (string.IsNullOrEmpty(maThuocChon))
+            {
+                MessageBox.Show("Vui lòng chọn một thuốc trong danh sách.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            using (frmLoThuoc f = new frmLoThuoc(maThuocChon, tenThuocChon))
+                f.ShowDialog(this.TopLevelControl ?? this);
         }
 
         // ================== HÓA ĐƠN ==================
@@ -372,7 +266,7 @@ namespace QuanLyNhaThuoc.GUI
                 : $"Đã có {hoaDonHienTai.Dong.Count} loại thuốc – tạm tính {hoaDonHienTai.TongTienHang:N0} đ";
         }
 
-        private void BtnThemVaoHD_Click(object sender, EventArgs e)
+        private void btnThemVaoHD_Click(object sender, EventArgs e)
         {
             if (hoaDonHienTai == null) KhoiTaoHoaDonMoi();
             if (hoaDonHienTai == null) return;
@@ -382,10 +276,10 @@ namespace QuanLyNhaThuoc.GUI
                 MessageBox.Show("Vui lòng chọn một thuốc trong danh sách.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            // [10/11/2026] không bán thuốc đã hết hạn
-            if (hanSDChon.HasValue && hanSDChon.Value.Date < DateTime.Today)
+            // [10/11/2026 lần 5] không bán lô đã hết hạn: chỉ còn lô hết hạn thì chặn
+            if (slBanDuocChon <= 0 && slTonChon > 0)
             {
-                MessageBox.Show($"Thuốc \"{tenThuocChon}\" đã HẾT HẠN ({hanSDChon.Value:dd/MM/yyyy}), không được bán.",
+                MessageBox.Show($"Thuốc \"{tenThuocChon}\" chỉ còn lô đã HẾT HẠN, không được bán.\nBấm \"Xem các lô\" để kiểm tra.",
                                 "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -397,18 +291,18 @@ namespace QuanLyNhaThuoc.GUI
 
             int soLuong = (int)nudSoLuong.Value;
             int daCo = hoaDonHienTai.SoLuongCua(maThuocChon);
-            if (daCo + soLuong > slTonChon)
+            if (daCo + soLuong > slBanDuocChon)
             {
-                MessageBox.Show($"Không đủ tồn kho! Còn {slTonChon}, hóa đơn đã có {daCo}.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show($"Không đủ hàng còn hạn! Còn {slBanDuocChon}, hóa đơn đã có {daCo}.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            hoaDonHienTai.ThemThuoc(maThuocChon, tenThuocChon, soLuong, giaBanChon);
+            hoaDonHienTai.ThemThuoc(maThuocChon, tenThuocChon, soLuong, giaBanChon, keDonChon);
             nudSoLuong.Value = 1;
             CapNhatNhanHoaDon();
         }
 
-        private void BtnThanhToanHD_Click(object sender, EventArgs e)
+        private void btnThanhToanHD_Click(object sender, EventArgs e)
         {
             if (hoaDonHienTai == null || hoaDonHienTai.Dong.Count == 0)
             {

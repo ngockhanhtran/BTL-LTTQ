@@ -21,6 +21,9 @@ namespace QuanLyNhaThuoc.DTO
         public static string TenVaiTro { get; private set; }
         public static DateTime ThoiDiemDangNhap { get; private set; }
 
+        /// <summary>[10/11/2026 lần 5] Quản lý vừa đặt lại mật khẩu / NV mới -> phải đổi mật khẩu trước khi làm việc.</summary>
+        public static bool PhaiDoiMK { get; set; }
+
         public static bool DaDangNhap { get { return !string.IsNullOrEmpty(MaNV); } }
         public static bool LaQuanLy { get { return MaVaiTro == VaiTroNV.QUAN_LY; } }
         public static bool LaBanHang { get { return MaVaiTro == VaiTroNV.BAN_HANG; } }
@@ -42,6 +45,7 @@ namespace QuanLyNhaThuoc.DTO
             MaVaiTro = (maVaiTro ?? "").Trim().ToUpperInvariant();
             TenVaiTro = tenVaiTro;
             ThoiDiemDangNhap = DateTime.Now;
+            PhaiDoiMK = false;
         }
 
         public static void DangXuat()
@@ -50,6 +54,7 @@ namespace QuanLyNhaThuoc.DTO
             TenNV = null;
             MaVaiTro = null;
             TenVaiTro = null;
+            PhaiDoiMK = false;
         }
     }
 }

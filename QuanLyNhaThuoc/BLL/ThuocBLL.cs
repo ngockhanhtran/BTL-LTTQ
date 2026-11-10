@@ -77,9 +77,12 @@ namespace QuanLyNhaThuoc.BLL
 
             ThuocBan t = thuocDAO.TimThuocBan(ma);
             if (t == null) { loi = "Không tìm thấy thuốc có mã vạch hoặc mã thuốc \"" + ma + "\"."; return null; }
-            if (t.HanSD.HasValue && t.HanSD.Value.Date < DateTime.Today)
+            // [10/11/2026 lần 5] quản lý theo lô: chỉ bán từ các lô CÒN HẠN (FEFO)
+            if (t.SLBanDuoc <= 0)
             {
-                loi = "Thuốc \"" + t.TenThuoc + "\" đã HẾT HẠN (" + t.HanSD.Value.ToString("dd/MM/yyyy") + "), không được bán.";
+                loi = t.SLHienCo > 0
+                    ? "Thuốc \"" + t.TenThuoc + "\" chỉ còn lô đã HẾT HẠN (" + t.SLHienCo + "), không được bán. Hãy hủy lô hết hạn."
+                    : "Thuốc \"" + t.TenThuoc + "\" đã hết hàng.";
                 return null;
             }
             if (t.GiaBan <= 0) { loi = "Thuốc \"" + t.TenThuoc + "\" chưa có giá bán."; return null; }
@@ -91,6 +94,7 @@ namespace QuanLyNhaThuoc.BLL
             KiemTra(t);
             if (thuocDAO.TonTai(t.MaThuoc)) throw new ArgumentException("Mã thuốc " + t.MaThuoc + " đã tồn tại.");
             thuocDAO.Them(t);
+            NhatKyBLL.Ghi(NhatKyBLL.THUOC, t.MaThuoc, "Thêm thuốc " + t.TenThuoc + (t.KeDon ? " (kê đơn)" : ""));
         }
 
         public void Sua(ThuocDTO t)
@@ -98,6 +102,14 @@ namespace QuanLyNhaThuoc.BLL
             KiemTra(t);
             if (!thuocDAO.TonTai(t.MaThuoc)) throw new ArgumentException("Không tìm thấy thuốc " + t.MaThuoc + ".");
             thuocDAO.Sua(t);
+            // đổi giá được trigger trg_Thuoc_NhatKyGia ghi riêng
+            NhatKyBLL.Ghi(NhatKyBLL.THUOC, t.MaThuoc, "Sửa thông tin thuốc " + t.TenThuoc + (t.KeDon ? " (kê đơn)" : ""));
+        }
+
+        /// <summary>[10/11/2026 lần 5] Các lô của thuốc (null = tất cả lô), thứ tự bán FEFO.</summary>
+        public DataTable LayLoThuoc(string maThuoc, bool chiConHang)
+        {
+            return thuocDAO.LayLoThuoc(string.IsNullOrWhiteSpace(maThuoc) ? null : maThuoc.Trim(), chiConHang);
         }
 
         /// <summary>Trả về false nếu thuốc đã có trong hóa đơn / phiếu nhập (không xóa được).</summary>
@@ -106,6 +118,7 @@ namespace QuanLyNhaThuoc.BLL
             try
             {
                 thuocDAO.Xoa(maThuoc);
+                NhatKyBLL.Ghi(NhatKyBLL.THUOC, maThuoc, "Xóa thuốc");
                 return true;
             }
             catch (Exception ex)

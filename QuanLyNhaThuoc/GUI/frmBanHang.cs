@@ -17,31 +17,17 @@ namespace QuanLyNhaThuoc.GUI
     //      hiện số điểm sẽ được cộng. Quy định ở DTO/TichDiemDTO.cs.
     //   3. XUẤT PDF + XEM TRƯỚC & IN hóa đơn (InHoaDon.cs) sau khi thanh toán.
     //   4. Nhân viên mặc định = người đang đăng nhập; chỉ Quản lý được chọn NV khác.
+    // Giao diện thiết kế bằng Designer (frmBanHang.Designer.cs) - mở bằng View Designer để kéo thả.
     public partial class frmBanHang : Form
     {
         private readonly HoaDonBanBLL hdbBLL = new HoaDonBanBLL();
         private readonly ThuocBLL thuocBLL = new ThuocBLL();
-
-        private TextBox txtMaHDB, txtNgayLap, txtMaKhach, txtTenKhach;
-        private ComboBox cboNhanVien;
-        private Label lblTrangThai, lblTienHang, lblTienGiam, lblTongTien;
-        private NumericUpDown nudGiamGia;
-        private DataGridView dgvChiTiet;
-        private Button btnThanhToan, btnLamMoi, btnXuatExcel;
-        private System.Windows.Forms.Timer tmrKhach;
-
-        // [10/11/2026] mã vạch, điểm, PDF
-        private TextBox txtQuet;
-        private NumericUpDown nudSLQuet, nudDungDiem;
-        private Label lblQuet, lblDiemKhach, lblQuyDoi, lblTienDiem, lblDiemSeCong;
-        private Button btnXuatPdf, btnIn;
 
         private HoaDonTam hoaDon;          // hóa đơn nhận từ trang Tra cứu (hoặc tạo khi quét mã vạch)
         private bool daThanhToan;
         private DateTime ngayBan;
         private string tenKhachHienTai;    // tên khách CŨ lấy từ CSDL (null nếu chưa tra / khách mới)
         private bool khachMoi;             // true = mã khách chưa có trong CSDL, phải nhập tay tên
-        private Label lblKhachInfo;
 
         private ThongTinKhach khachCu;     // [10/11/2026] điểm + số lần mua của khách cũ
         private bool dangCapNhatDiem;
@@ -58,268 +44,80 @@ namespace QuanLyNhaThuoc.GUI
 
         public frmBanHang()
         {
-            this.AutoScaleDimensions = new SizeF(96F, 96F);
-            this.AutoScaleMode = AutoScaleMode.Dpi;
+            InitializeComponent();
+            this.Dock = DockStyle.Fill;
 
-            this.Text = "Bán Hàng";
-            InitializeComponentCustom();
+            // Phần không đặt được trong Designer
+            lblQuyDinh.Text = TichDiemBLL.MoTaQuyDinh();
+            // Tag = màu gốc của nút, dùng khi bật lại nút (BatTatNut)
+            foreach (Button b in new[] { btnThanhToan, btnLamMoi, btnXuatExcel, btnXuatPdf, btnIn, btnQuet })
+                b.Tag = b.BackColor;
+
             LoadNhanVien();
             DatLaiForm();
         }
 
-        private void InitializeComponentCustom()
+        // ================== SỰ KIỆN GẮN TỪ DESIGNER ==================
+
+        private void nudDungDiem_ValueChanged(object sender, EventArgs e)
         {
-            this.SuspendLayout();
-
-            this.BackColor = Color.FromArgb(244, 246, 249);
-            this.Dock = DockStyle.Fill;
-
-            TableLayoutPanel tbl = new TableLayoutPanel() { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Padding = new Padding(15) };
-            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42F));
-            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58F));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-
-            // ================= NỬA TRÁI: THÔNG TIN HÓA ĐƠN =================
-            Panel pnlTrai = new Panel() { Dock = DockStyle.Fill, BackColor = Color.White, Margin = new Padding(0, 0, 8, 0), AutoScroll = true };
-            pnlTrai.Controls.Add(new Label() { Text = "Thông Tin Hóa Đơn", Font = new Font("Segoe UI", 12, FontStyle.Bold), Left = 20, Top = 20, AutoSize = true });
-
-            int y = 65;
-            TaoNhan(pnlTrai, "Mã hóa đơn:", y); txtMaHDB = TaoO(pnlTrai, y, true); y += 40;
-            TaoNhan(pnlTrai, "Ngày lập:", y); txtNgayLap = TaoO(pnlTrai, y, true); y += 40;
-
-            TaoNhan(pnlTrai, "Nhân viên:", y);
-            cboNhanVien = new ComboBox()
-            {
-                Left = 145,
-                Top = y,
-                Width = 230,
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Font = new Font("Segoe UI", 10),
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
-            };
-            pnlTrai.Controls.Add(cboNhanVien);
-            y += 40;
-
-            TaoNhan(pnlTrai, "Mã khách hàng:", y); txtMaKhach = TaoO(pnlTrai, y, false); txtMaKhach.MaxLength = 10; y += 40;
-            TaoNhan(pnlTrai, "Tên khách hàng:", y); txtTenKhach = TaoO(pnlTrai, y, true); txtTenKhach.MaxLength = 50; y += 30;
-
-            // Dòng báo khách cũ / khách mới ngay dưới ô tên
-            lblKhachInfo = new Label() { Left = 145, Top = y, Width = 230, Height = 20, Font = new Font("Segoe UI", 8.5F, FontStyle.Italic), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
-            pnlTrai.Controls.Add(lblKhachInfo);
-            y += 26;
-
-            // ----- [10/11/2026] TÍCH ĐIỂM -----
-            Label sepDiem = new Label() { Left = 20, Top = y, Width = 355, Height = 2, BorderStyle = BorderStyle.Fixed3D, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
-            pnlTrai.Controls.Add(sepDiem);
-            y += 8;
-            pnlTrai.Controls.Add(new Label() { Text = "⭐ Điểm tích lũy", Left = 20, Top = y, AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
-            y += 24;
-            lblDiemKhach = new Label() { Left = 20, Top = y, Width = 355, Height = 22, Font = new Font("Segoe UI", 9.5F), ForeColor = Color.FromArgb(0, 90, 160), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
-            pnlTrai.Controls.Add(lblDiemKhach);
-            y += 26;
-            TaoNhan(pnlTrai, "Dùng điểm:", y);
-            nudDungDiem = new NumericUpDown() { Left = 145, Top = y, Width = 90, Minimum = 0, Maximum = 0, Font = new Font("Segoe UI", 10), ThousandsSeparator = true };
-            nudDungDiem.ValueChanged += (s, e) =>
-            {
-                if (dangCapNhatDiem || hoaDon == null || daThanhToan) return;
-                hoaDon.DiemSuDung = (int)nudDungDiem.Value;
-                CapNhatTongTien();
-            };
-            pnlTrai.Controls.Add(nudDungDiem);
-            lblQuyDoi = new Label() { Left = 240, Top = y + 3, Width = 140, Height = 20, Font = new Font("Segoe UI", 8.5F, FontStyle.Italic), ForeColor = Color.DimGray, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
-            pnlTrai.Controls.Add(lblQuyDoi);
-            y += 32;
-            pnlTrai.Controls.Add(new Label()
-            {
-                Left = 20,
-                Top = y,
-                Width = 355,
-                Height = 66,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-                ForeColor = Color.Gray,
-                Font = new Font("Segoe UI", 8F),
-                Text = TichDiemBLL.MoTaQuyDinh()
-            });
-            y += 70;
-
-            lblTrangThai = new Label() { Left = 20, Top = y, Width = 355, Height = 26, Font = new Font("Segoe UI", 10, FontStyle.Bold), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
-            pnlTrai.Controls.Add(lblTrangThai);
-            y += 30;
-
-            pnlTrai.Controls.Add(new Label()
-            {
-                Left = 20,
-                Top = y,
-                Width = 355,
-                Height = 66,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-                ForeColor = Color.DimGray,
-                Font = new Font("Segoe UI", 9, FontStyle.Italic),
-                Text = "• Thêm thuốc từ trang Tra cứu hoặc QUÉT MÃ VẠCH bên phải.\n• Khách cũ: nhập mã, tên + điểm tự hiện. Khách mới: nhập thêm tên.\n• Nhấp đúp một dòng bên phải để bỏ thuốc khỏi đơn."
-            });
-
-            // Tự tra tên khách sau khi ngừng gõ 0.4s
-            tmrKhach = new System.Windows.Forms.Timer() { Interval = 400 };
-            tmrKhach.Tick += (s, e) => { tmrKhach.Stop(); TraCuuKhachHang(); };
-            txtMaKhach.TextChanged += (s, e) =>
-            {
-                if (daThanhToan) return;
-                tenKhachHienTai = null;
-                khachMoi = false;
-                khachCu = null;
-                txtTenKhach.Clear();
-                DatCheDoTenKhach(false);
-                lblKhachInfo.Text = "";
-                CapNhatTongTien();
-                tmrKhach.Stop();
-                tmrKhach.Start();
-            };
-
-            // ================= NỬA PHẢI: CHI TIẾT + TỔNG TIỀN =================
-            Panel pnlPhai = new Panel() { Dock = DockStyle.Fill, BackColor = Color.White, Margin = new Padding(8, 0, 0, 0), Padding = new Padding(15) };
-            Label lblTieuDePhai = new Label() { Text = "Chi Tiết Hóa Đơn", Dock = DockStyle.Top, Height = 35, Font = new Font("Segoe UI", 12, FontStyle.Bold) };
-
-            // ----- [10/11/2026] Ô QUÉT MÃ VẠCH -----
-            Panel pnlQuet = new Panel() { Dock = DockStyle.Top, Height = 62, BackColor = Color.FromArgb(240, 247, 255), Padding = new Padding(8) };
-            Label lblQuetTieuDe = new Label() { Text = "▌▌▌ Quét mã vạch:", Left = 8, Top = 12, Width = 120, Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), ForeColor = Color.FromArgb(0, 90, 160) };
-            txtQuet = new TextBox() { Left = 130, Top = 9, Width = 160, Font = new Font("Segoe UI", 11) };
-            txtQuet.KeyDown += (s, e) =>
-            {
-                if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; QuetMa(); }
-            };
-            Label lblSLQuet = new Label() { Text = "SL:", Left = 296, Top = 12, Width = 26, Font = new Font("Segoe UI", 9.5F) };
-            nudSLQuet = new NumericUpDown() { Left = 322, Top = 9, Width = 55, Minimum = 1, Maximum = 10000, Value = 1, Font = new Font("Segoe UI", 10) };
-            Button btnQuet = TaoNut("Thêm", 383, 8, 70, Color.FromArgb(0, 122, 204));
-            btnQuet.Height = 30;
-            btnQuet.Click += (s, e) => QuetMa();
-            lblQuet = new Label() { Left = 8, Top = 40, Width = 460, Height = 18, Font = new Font("Segoe UI", 8.5F, FontStyle.Italic), ForeColor = Color.DimGray, Text = "Đặt con trỏ vào ô rồi quét, hoặc gõ mã vạch / mã thuốc và nhấn Enter." };
-            pnlQuet.Controls.AddRange(new Control[] { lblQuetTieuDe, txtQuet, lblSLQuet, nudSLQuet, btnQuet, lblQuet });
-
-            dgvChiTiet = new DataGridView()
-            {
-                Dock = DockStyle.Fill,
-                ReadOnly = true,
-                AllowUserToAddRows = false,
-                AllowUserToDeleteRows = false,
-                AllowUserToResizeRows = false,
-                RowHeadersVisible = false,
-                MultiSelect = false,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                BackgroundColor = Color.White
-            };
-            dgvChiTiet.Columns.Add("STT", "STT");
-            dgvChiTiet.Columns.Add("MaThuoc", "Mã thuốc");
-            dgvChiTiet.Columns.Add("TenThuoc", "Tên thuốc");
-            dgvChiTiet.Columns.Add("SoLuong", "SL");
-            dgvChiTiet.Columns.Add("GiaBan", "Giá bán");
-            dgvChiTiet.Columns.Add("ThanhTien", "Thành tiền");
-            dgvChiTiet.Columns["STT"].FillWeight = 8;
-            dgvChiTiet.Columns["MaThuoc"].FillWeight = 15;
-            dgvChiTiet.Columns["TenThuoc"].FillWeight = 37;
-            dgvChiTiet.Columns["SoLuong"].FillWeight = 10;
-            dgvChiTiet.Columns["GiaBan"].FillWeight = 15;
-            dgvChiTiet.Columns["ThanhTien"].FillWeight = 18;
-            foreach (string c in new[] { "SoLuong", "GiaBan", "ThanhTien" })
-                dgvChiTiet.Columns[c].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
-            dgvChiTiet.CellDoubleClick += DgvChiTiet_CellDoubleClick;
-
-            Panel pnlTong = new Panel() { Dock = DockStyle.Bottom, Height = 272 };
-            Font fNhan = new Font("Segoe UI", 10);
-
-            pnlTong.Controls.Add(new Label() { Text = "Giảm giá (%):", Left = 0, Top = 11, Width = 135, Font = fNhan });
-            nudGiamGia = new NumericUpDown() { Left = 140, Top = 8, Width = 90, Minimum = 0, Maximum = 100, Font = fNhan };
-            nudGiamGia.ValueChanged += (s, e) =>
-            {
-                if (hoaDon == null || daThanhToan) return;
-                hoaDon.GiamGiaPhanTram = nudGiamGia.Value;
-                CapNhatTongTien();
-            };
-            pnlTong.Controls.Add(nudGiamGia);
-
-            pnlTong.Controls.Add(new Label() { Text = "Tiền hàng:", Left = 0, Top = 44, Width = 135, Font = fNhan });
-            lblTienHang = new Label() { Left = 140, Top = 44, AutoSize = true, Font = fNhan };
-            pnlTong.Controls.Add(lblTienHang);
-
-            pnlTong.Controls.Add(new Label() { Text = "Giảm giá:", Left = 0, Top = 68, Width = 135, Font = fNhan });
-            lblTienGiam = new Label() { Left = 140, Top = 68, AutoSize = true, Font = fNhan };
-            pnlTong.Controls.Add(lblTienGiam);
-
-            pnlTong.Controls.Add(new Label() { Text = "Đổi điểm:", Left = 0, Top = 92, Width = 135, Font = fNhan });
-            lblTienDiem = new Label() { Left = 140, Top = 92, AutoSize = true, Font = fNhan };
-            pnlTong.Controls.Add(lblTienDiem);
-
-            pnlTong.Controls.Add(new Label() { Text = "TỔNG TIỀN:", Left = 0, Top = 126, Width = 135, Font = new Font("Segoe UI", 12, FontStyle.Bold) });
-            lblTongTien = new Label() { Left = 140, Top = 120, AutoSize = true, Font = new Font("Segoe UI", 16, FontStyle.Bold), ForeColor = Color.FromArgb(220, 53, 69) };
-            pnlTong.Controls.Add(lblTongTien);
-
-            lblDiemSeCong = new Label() { Left = 0, Top = 156, Width = 470, Height = 20, Font = new Font("Segoe UI", 9F, FontStyle.Italic), ForeColor = Color.FromArgb(40, 140, 60) };
-            pnlTong.Controls.Add(lblDiemSeCong);
-
-            btnThanhToan = TaoNut("Thanh toán", 0, 182, 150, Color.FromArgb(0, 122, 204));
-            btnLamMoi = TaoNut("Làm mới", 158, 182, 110, Color.FromArgb(108, 117, 125));
-            btnXuatExcel = TaoNut("Xuất hóa đơn Excel", 276, 182, 160, Color.FromArgb(40, 167, 69));
-            btnXuatPdf = TaoNut("Xuất hóa đơn PDF", 0, 228, 150, Color.FromArgb(200, 35, 51));
-            btnIn = TaoNut("🖨 Xem trước && In", 158, 228, 160, Color.FromArgb(52, 73, 94));
-            btnThanhToan.Click += BtnThanhToan_Click;
-            btnLamMoi.Click += BtnLamMoi_Click;
-            btnXuatExcel.Click += (s, e) => XuatExcel();
-            btnXuatPdf.Click += (s, e) => XuatPdf();
-            btnIn.Click += (s, e) => XemTruocVaIn();
-            pnlTong.Controls.AddRange(new Control[] { btnThanhToan, btnLamMoi, btnXuatExcel, btnXuatPdf, btnIn });
-
-            // Fill thêm trước để dock sau cùng
-            pnlPhai.Controls.Add(dgvChiTiet);
-            pnlPhai.Controls.Add(pnlTong);
-            pnlPhai.Controls.Add(pnlQuet);
-            pnlPhai.Controls.Add(lblTieuDePhai);
-
-            tbl.Controls.Add(pnlTrai, 0, 0);
-            tbl.Controls.Add(pnlPhai, 1, 0);
-            this.Controls.Add(tbl);
-
-            this.ResumeLayout(false);
-            this.PerformLayout();
+            if (dangCapNhatDiem || hoaDon == null || daThanhToan) return;
+            hoaDon.DiemSuDung = (int)nudDungDiem.Value;
+            CapNhatTongTien();
         }
 
-        private void TaoNhan(Panel p, string text, int y)
+        private void nudGiamGia_ValueChanged(object sender, EventArgs e)
         {
-            p.Controls.Add(new Label() { Text = text, Left = 20, Top = y + 3, Width = 120, Font = new Font("Segoe UI", 10) });
+            if (hoaDon == null || daThanhToan) return;
+            hoaDon.GiamGiaPhanTram = nudGiamGia.Value;
+            CapNhatTongTien();
         }
 
-        private TextBox TaoO(Panel p, int y, bool chiDoc)
+        // Tự tra tên khách sau khi ngừng gõ 0.4s (tmrKhach.Interval = 400 trong Designer)
+        private void tmrKhach_Tick(object sender, EventArgs e)
         {
-            TextBox t = new TextBox()
-            {
-                Left = 145,
-                Top = y,
-                Width = 230,
-                Font = new Font("Segoe UI", 10),
-                ReadOnly = chiDoc,
-                TabStop = !chiDoc,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
-            };
-            if (chiDoc) t.BackColor = Color.FromArgb(240, 242, 245);
-            p.Controls.Add(t);
-            return t;
+            tmrKhach.Stop();
+            TraCuuKhachHang();
         }
 
-        private Button TaoNut(string text, int left, int top, int width, Color mau)
+        private void txtMaKhach_TextChanged(object sender, EventArgs e)
         {
-            return new Button()
-            {
-                Text = text,
-                Left = left,
-                Top = top,
-                Width = width,
-                Height = 40,
-                BackColor = mau,
-                ForeColor = Color.White,
-                Tag = mau,
-                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
-                FlatStyle = FlatStyle.Flat
-            };
+            if (daThanhToan) return;
+            tenKhachHienTai = null;
+            khachMoi = false;
+            khachCu = null;
+            txtTenKhach.Clear();
+            DatCheDoTenKhach(false);
+            lblKhachInfo.Text = "";
+            CapNhatTongTien();
+            tmrKhach.Stop();
+            tmrKhach.Start();
         }
+
+        private void txtQuet_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; QuetMa(); }
+        }
+
+        private void btnQuet_Click(object sender, EventArgs e) { QuetMa(); }
+
+        // [10/11/2026 lần 5] mã đơn thuốc (bắt buộc khi hóa đơn có thuốc kê đơn)
+        private void txtMaDonThuoc_TextChanged(object sender, EventArgs e)
+        {
+            if (hoaDon != null && !daThanhToan) hoaDon.MaDonThuoc = txtMaDonThuoc.Text.Trim();
+        }
+
+        private void CapNhatKeDon()
+        {
+            bool coKeDon = hoaDon != null && hoaDon.CoThuocKeDon;
+            lblKeDon.Text = coKeDon ? "℞ Có thuốc kê đơn – BẮT BUỘC nhập mã đơn" : "Chỉ cần khi có thuốc kê đơn (℞)";
+            lblKeDon.ForeColor = coKeDon ? Color.FromArgb(200, 35, 51) : Color.DimGray;
+            txtMaDonThuoc.BackColor = daThanhToan ? Color.FromArgb(240, 242, 245)
+                                    : coKeDon && txtMaDonThuoc.Text.Trim() == "" ? Color.FromArgb(255, 243, 205) : Color.White;
+        }
+        private void btnXuatExcel_Click(object sender, EventArgs e) { XuatExcel(); }
+        private void btnXuatPdf_Click(object sender, EventArgs e) { XuatPdf(); }
+        private void btnIn_Click(object sender, EventArgs e) { XemTruocVaIn(); }
 
         private static void BatTatNut(Button b, bool bat)
         {
@@ -347,6 +145,8 @@ namespace QuanLyNhaThuoc.GUI
 
             hoaDon = hd;
             hoaDon.DiemSuDung = 0;
+            try { hdbBLL.KiemTraKeDon(hoaDon); } catch { }      // [10/11/2026 lần 5] đánh dấu thuốc kê đơn theo CSDL
+            txtMaDonThuoc.Text = hoaDon.MaDonThuoc ?? "";
             daThanhToan = false;
             khachMoi = false;
             khachCu = null;
@@ -372,9 +172,14 @@ namespace QuanLyNhaThuoc.GUI
             {
                 int stt = 1;
                 foreach (DongHoaDon d in hoaDon.Dong)
-                    dgvChiTiet.Rows.Add(stt++, d.MaThuoc, d.TenThuoc, d.SoLuong, d.GiaBan.ToString("N0"), d.ThanhTien.ToString("N0"));
+                {
+                    int i = dgvChiTiet.Rows.Add(stt++, d.MaThuoc, (d.KeDon ? "℞ " : "") + d.TenThuoc, d.SoLuong,
+                                                d.GiaBan.ToString("N0"), d.ThanhTien.ToString("N0"));
+                    if (d.KeDon) dgvChiTiet.Rows[i].DefaultCellStyle.ForeColor = Color.FromArgb(200, 35, 51);   // [10/11/2026 lần 5]
+                }
             }
             CapNhatTongTien();
+            CapNhatKeDon();
         }
 
         // [10/11/2026] Cập nhật điểm (giới hạn đổi điểm theo tổng tiền) rồi tới các dòng tổng tiền
@@ -471,6 +276,8 @@ namespace QuanLyNhaThuoc.GUI
 
             cboNhanVien.Enabled = !daThanhToan && choChonNhanVien;
             txtMaKhach.ReadOnly = daThanhToan;
+            txtMaDonThuoc.ReadOnly = daThanhToan;                     // [10/11/2026 lần 5]
+            CapNhatKeDon();
             DatCheDoTenKhach(khachMoi && !daThanhToan);
             nudGiamGia.Enabled = hoaDon != null && !daThanhToan;
 
@@ -622,19 +429,19 @@ namespace QuanLyNhaThuoc.GUI
 
             int sl = (int)nudSLQuet.Value;
             int daCo = hoaDon.SoLuongCua(t.MaThuoc);
-            if (daCo + sl > t.SLHienCo)
+            if (daCo + sl > t.SLBanDuoc)    // [10/11/2026 lần 5] chỉ tính lô còn hạn
             {
-                BaoQuet($"Không đủ tồn kho \"{t.TenThuoc}\": còn {t.SLHienCo}, hóa đơn đã có {daCo}.", true);
+                BaoQuet($"Không đủ hàng còn hạn \"{t.TenThuoc}\": còn {t.SLBanDuoc}, hóa đơn đã có {daCo}.", true);
                 txtQuet.SelectAll();
                 txtQuet.Focus();
                 return;
             }
 
-            hoaDon.ThemThuoc(t.MaThuoc, t.TenThuoc, sl, t.GiaBan);
+            hoaDon.ThemThuoc(t.MaThuoc, t.TenThuoc, sl, t.GiaBan, t.KeDon);
             HienThiHoaDon();
             CapNhatTrangThai();
             ChonDongThuoc(t.MaThuoc);
-            BaoQuet($"✓ Đã thêm {sl} x {t.TenThuoc} ({Tien(t.GiaBan)})", false);
+            BaoQuet($"✓ Đã thêm {sl} x {t.TenThuoc} ({Tien(t.GiaBan)})" + (t.KeDon ? " – ℞ thuốc kê đơn, nhập mã đơn thuốc" : ""), false);
 
             txtQuet.Clear();
             nudSLQuet.Value = 1;
@@ -652,9 +459,9 @@ namespace QuanLyNhaThuoc.GUI
         {
             foreach (DataGridViewRow r in dgvChiTiet.Rows)
             {
-                if (Convert.ToString(r.Cells["MaThuoc"].Value) == maThuoc)
+                if (Convert.ToString(r.Cells[colMaThuoc.Index].Value) == maThuoc)
                 {
-                    dgvChiTiet.CurrentCell = r.Cells["TenThuoc"];
+                    dgvChiTiet.CurrentCell = r.Cells[colTenThuoc.Index];
                     return;
                 }
             }
@@ -666,8 +473,8 @@ namespace QuanLyNhaThuoc.GUI
         {
             if (e.RowIndex < 0 || hoaDon == null || daThanhToan) return;
 
-            string ma = dgvChiTiet.Rows[e.RowIndex].Cells["MaThuoc"].Value.ToString();
-            string ten = dgvChiTiet.Rows[e.RowIndex].Cells["TenThuoc"].Value.ToString();
+            string ma = dgvChiTiet.Rows[e.RowIndex].Cells[colMaThuoc.Index].Value.ToString();
+            string ten = dgvChiTiet.Rows[e.RowIndex].Cells[colTenThuoc.Index].Value.ToString();
             if (MessageBox.Show($"Bỏ thuốc \"{ten}\" khỏi hóa đơn?", "Xác nhận", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
 
@@ -676,7 +483,7 @@ namespace QuanLyNhaThuoc.GUI
             CapNhatTrangThai();
         }
 
-        private void BtnThanhToan_Click(object sender, EventArgs e)
+        private void btnThanhToan_Click(object sender, EventArgs e)
         {
             if (hoaDon == null || hoaDon.Dong.Count == 0)
             {
@@ -707,6 +514,25 @@ namespace QuanLyNhaThuoc.GUI
                 MessageBox.Show($"Mã khách hàng \"{maKhach}\" chưa có trong hệ thống.\nVui lòng nhập tên khách hàng mới.",
                     "Khách hàng mới", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 txtTenKhach.Focus();
+                return;
+            }
+
+            // [10/11/2026 lần 5] thuốc kê đơn -> phải có mã đơn thuốc
+            try
+            {
+                hoaDon.MaDonThuoc = txtMaDonThuoc.Text.Trim();
+                string loiKeDon = hdbBLL.KiemTraKeDon(hoaDon);
+                if (loiKeDon != null)
+                {
+                    HienThiHoaDon();
+                    MessageBox.Show(loiKeDon, "Thuốc kê đơn", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    txtMaDonThuoc.Focus();
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Lỗi kiểm tra thuốc kê đơn: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
@@ -779,7 +605,7 @@ namespace QuanLyNhaThuoc.GUI
             }
         }
 
-        private void BtnLamMoi_Click(object sender, EventArgs e)
+        private void btnLamMoi_Click(object sender, EventArgs e)
         {
             if (hoaDon != null && !daThanhToan && hoaDon.Dong.Count > 0)
             {
@@ -801,6 +627,8 @@ namespace QuanLyNhaThuoc.GUI
             txtNgayLap.Clear();
             txtMaKhach.ReadOnly = false;
             txtMaKhach.Clear();
+            txtMaDonThuoc.ReadOnly = false;
+            txtMaDonThuoc.Clear();
             nudGiamGia.Value = 0;
             lblKhachInfo.Text = "";
             HienThiHoaDon();

@@ -101,6 +101,28 @@ namespace QuanLyNhaThuoc.DAL
                 return cmd.ExecuteNonQuery();
         }
 
+        /// <summary>[10/11/2026 lần 5] Gọi stored procedure trong transaction (tham số OUTPUT đọc lại sau khi gọi).</summary>
+        public static int ExecProc(SqlConnection conn, SqlTransaction tx, string tenProc, params SqlParameter[] ps)
+        {
+            using (SqlCommand cmd = TaoLenh(conn, tx, tenProc, CommandType.StoredProcedure, ps))
+            {
+                int kq = cmd.ExecuteNonQuery();
+                cmd.Parameters.Clear();     // để dùng lại SqlParameter (đọc giá trị OUTPUT) sau khi lệnh bị hủy
+                return kq;
+            }
+        }
+
+        public static DataTable QueryProc(SqlConnection conn, SqlTransaction tx, string tenProc, params SqlParameter[] ps)
+        {
+            using (SqlCommand cmd = TaoLenh(conn, tx, tenProc, CommandType.StoredProcedure, ps))
+            using (SqlDataAdapter da = new SqlDataAdapter(cmd))
+            {
+                DataTable dt = new DataTable();
+                da.Fill(dt);
+                return dt;
+            }
+        }
+
         private static SqlCommand TaoLenh(SqlConnection conn, SqlTransaction tx, string sql, CommandType loai, SqlParameter[] ps)
         {
             SqlCommand cmd = new SqlCommand(sql, conn, tx) { CommandType = loai };
