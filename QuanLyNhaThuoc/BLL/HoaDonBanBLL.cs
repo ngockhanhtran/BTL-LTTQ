@@ -88,8 +88,19 @@ namespace QuanLyNhaThuoc.BLL
             return null;
         }
 
+        /// [10/11/2026] Thông tin khách + điểm + số lần đã mua; null nếu khách chưa có trong CSDL
+        public ThongTinKhach LayThongTinKhach(string maKhach)
+        {
+            if (string.IsNullOrWhiteSpace(maKhach)) return null;
+            return hdbDAO.GetThongTinKhach(maKhach.Trim());
+        }
+
         /// tenKhachMoi Tên khách khi là khách MỚI (sẽ được thêm vào bảng KhachHang); null nếu là khách cũ
-        public void LuuHoaDon(HoaDonTam hd, string maNV, string maKhach, string tenKhachMoi, DateTime ngayBan)
+        /// [10/11/2026] Thêm tích điểm. khachCu = thông tin khách cũ (null nếu khách mới).
+        ///   diemCong  : số điểm được cộng sau hóa đơn này
+        ///   diemConLai: số điểm của khách sau khi trừ điểm đã dùng và cộng điểm mới
+        public void LuuHoaDon(HoaDonTam hd, string maNV, string maKhach, string tenKhachMoi, DateTime ngayBan,
+                              ThongTinKhach khachCu, out int diemCong, out int diemConLai)
         {
             if (hd == null || hd.Dong.Count == 0)
                 throw new Exception("Hóa đơn chưa có thuốc nào!");
@@ -99,9 +110,26 @@ namespace QuanLyNhaThuoc.BLL
                 throw new Exception("Chưa nhập mã khách hàng!");
             if (tenKhachMoi != null && string.IsNullOrWhiteSpace(tenKhachMoi))
                 throw new Exception("Khách hàng mới phải có tên!");
+            if (maKhach.Trim().Length > 10)
+                throw new Exception("Mã khách hàng tối đa 10 ký tự!");
+            if (tenKhachMoi != null && tenKhachMoi.Trim().Length > 50)
+                throw new Exception("Tên khách hàng tối đa 50 ký tự!");
 
-            hdbDAO.LuuHoaDon(hd, maNV.Trim(), maKhach.Trim(),
-                             tenKhachMoi == null ? null : tenKhachMoi.Trim(), ngayBan);
+            // Kiểm tra số điểm đổi
+            if (hd.DiemSuDung > 0)
+            {
+                if (khachCu == null)
+                    throw new Exception("Khách hàng mới chưa có điểm để đổi!");
+                int toiDa = TichDiemBLL.DiemDoiToiDa(khachCu.DiemTichLuy, hd.TongSauGiamGia);
+                if (hd.DiemSuDung > toiDa)
+                    throw new Exception($"Chỉ được dùng tối đa {toiDa} điểm cho hóa đơn này!");
+            }
+
+            int soLanDaMua = khachCu == null ? 0 : khachCu.SoLanMua;
+            diemCong = TichDiemBLL.TinhDiemCong(hd.TongThanhToan, soLanDaMua);
+
+            diemConLai = hdbDAO.LuuHoaDon(hd, maNV.Trim(), maKhach.Trim(),
+                                          tenKhachMoi == null ? null : tenKhachMoi.Trim(), ngayBan, diemCong);
         }
     }
 }

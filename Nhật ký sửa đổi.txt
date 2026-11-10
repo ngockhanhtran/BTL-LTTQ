@@ -1,4 +1,4 @@
-Sửa lần 1: bán thuốc và quản lý thuốc
+﻿Sửa lần 1: bán thuốc và quản lý thuốc
 đầu tiên sửa lại form giao diện tra cứu thuốc tôi nghĩ giữ nguyên layout cũng được, tôi nghĩ không nên cho thêm, sửa xóa thuốc ở đấy chỉ được tra cứu thuốc (tên/thành phần/công dụng) về phần thông tin chi tiết thuốc thì chỉ cho phép xem read only đó các thuộc tính như: mã thuốc, tên thuốc, thành phần, giá nhập, giá bán, số lượng hiện có, sử dụng, chống chỉ định. Và ở dưới phần thông tin thuốc đấy có thêm 2 label, và 2 button: label 1 có chức năng hiển thị mã hóa đơn bán được sinh tự động dựa trên cơ sở dữ liệu, label 2 sẽ là số lượng thuốc đó, nút button 1 (thêm vào hóa đơn) khi click sẽ thêm vào hóa đơn với mã tương ứng dựa theo trên label, button 2(thanh toán với hóa đơn) khi click vào sẽ chuyển sang trang bán hàng và tăng mã hóa đơn ở label lên 1 đơn vị 
 
 thứ 2 chỉnh sửa form giao diện bán hàng, tôi nghĩ nên chia đôi giao diện: phần 1 gồm phần mã hóa đơn bán sẽ là read only vì tôi nghĩ là đã nhận từ tra cứu trước rồi nên để read only, mã nhân viên tôi nghĩ nên để là combo box và kiểu down style list, mã khách hàng, tên khách hàng vẫn như cũ(nhập mã khách hàng cũ tự động hiển thị tên khách hàng đấy); desgin thêm 1 bên tôi nghĩ nên hiển thị tên thuốc, số lượng, giá bán. Thêm giảm giá (nếu có) và tổng tiền ở cuối. Thêm button thanh toán, làm mới(làm mới lại đơn bán), xuất hóa đơn ra excel. Ở button thanh toán khi bấm vào có thể load sang form mới là frmThanhToan; form này hiển thị mã qr ngân hàng của cửa hàng, và button đã thanh toán, khi bấm button đã thanh toán trở về trang bán hàng với hóa đơn vừa thanh toán và active nút xuất hóa đơn excel
@@ -14,3 +14,86 @@ tôi muốn thêm cả phần cảnh báo thuốc sắp hết dù không có tro
 ở phần báo cáo danh sách hóa đơn và tổng tiền nhập hàng theo tháng chọn trước có vẻ chưa chính xác vì chưa chọn tháng nên cần làm lại 
 phần top 5 hóa đơn bán ít theo năm chọn trước cũng cần sửa lại một chút vì chưa cho phép chọn năm
 ở phần báo cáo danh sách họ tên, tổng tiền của 2 NV bán được ít tiền nhất theo một quý chọn trước cũng đang sai vì phần tổng doanh thu có vẻ đang lỗi không cộng thêm khi bấm vẫn xuất ra dữ liệu là 0.00 dù đã bán với mã nhân viên đấy rồi
+
+
+==========================================================================================
+Sửa lần 4 (10/11/2026): CSDL, công dụng, đăng nhập - phân quyền, quét mã vạch, tích điểm,
+                        hóa đơn PDF, quản lý danh mục, dashboard
+==========================================================================================
+
+A. CƠ SỞ DỮ LIỆU  (file CSDL_QuanLyNhaThuoc.sql thay cho CSDL_first_edition.sql)
+   - Gộp thành 1 script cài đặt, sắp đúng thứ tự, chạy lại nhiều lần không lỗi, không mất dữ liệu.
+     Mở SSMS -> F5 chạy CẢ FILE. Chi tiết từng thay đổi ghi ở mục "LỊCH SỬ CẬP NHẬT" đầu file.
+   - Yêu cầu 4: sp_TimKiemThuoc trả thêm cột CongDung, tìm theo tên công dụng + ghi chú công dụng.
+     Dữ liệu mẫu 10 công dụng (CD01-CD10), 6 thuốc mẫu (TH010-TH015).
+   - Mới: bảng VaiTro; NhanVien thêm MatKhau, MaVaiTro, YeuCauDoiMK, NgayYeuCauDoiMK, NghiViec;
+     Thuoc thêm MaVach; KhachHang thêm DiemTichLuy; HoaDonBan thêm DiemSuDung, TienGiamDiem, DiemCong.
+   - Mới: 5 proc sp_Dashboard_* cho dashboard / biểu đồ. Proc báo cáo 6-9 KHÔNG đổi.
+   - Vai trò theo TIỀN TỐ MÃ NV: QLxxx = Quản lý, TKxxx = Thủ kho, NVxx = Bán hàng.
+   - Tài khoản: mật khẩu mặc định = mã NV + 11
+       QL001 / QL00111  (quản lý, mới)        TK001 / TK00111  (thủ kho, mới)
+       NV01 / NV0111, NV02 / NV0211, NV03 / NV0311  (bán hàng)
+   - File mẫu phiếu nhập (MauPhieuNhap.xlsx, nút "Tải file Excel mẫu") dùng MaNV = TK001.
+   - Khách mẫu KH001 có sẵn 150 điểm để thử đổi điểm. Mã vạch mẫu: Panadol 8934588012112,
+     Amoxicillin 8936100100107, Ibuprofen 8936100100152, TEST01 (hết hạn) 8930000000017.
+
+B. ĐĂNG NHẬP + PHÂN QUYỀN
+   - Mở app -> form Đăng nhập (mã NV + mật khẩu, nút hiện mật khẩu, "Quên mật khẩu?").
+   - Quên mật khẩu: nhập mã NV + số điện thoại đã đăng ký -> gửi yêu cầu tới quản lý.
+   - Menu theo vai trò:
+       Bán hàng : Tra cứu thuốc (chỉ xem) + Bán hàng
+       Thủ kho  : Tra cứu thuốc (được sửa CÔNG DỤNG và CHỐNG CHỈ ĐỊNH, không có phần lập hóa đơn) + Nhập hàng
+       Quản lý  : tất cả + Dashboard, Báo cáo, Quản lý nhân viên, Danh mục (Thuốc, Khách hàng, NCC,
+                  Công dụng, Đơn vị tính, Dạng điều chế, Nước SX)
+   - Góc dưới sidebar: tên + vai trò, "Đổi mật khẩu", "Đăng xuất" (quay lại màn hình đăng nhập).
+   - Quản lý nhân viên: xem toàn bộ thông tin + mật khẩu; NV quên mật khẩu -> dòng TÔ VÀNG, lên đầu
+     danh sách, có nhãn vàng trên header. Chọn NV -> nhập mật khẩu mới (hoặc "Mặc định") -> Lưu -> hết vàng.
+     Thêm / sửa / xóa NV; NV đã có hóa đơn không xóa được -> chuyển "Đã nghỉ việc" (khóa đăng nhập).
+     Không cho tự khóa / tự bỏ quyền quản lý, luôn còn ít nhất 1 quản lý.
+
+C. BÁN HÀNG
+   - Ô "Quét mã vạch": máy quét (gõ mã + Enter) hoặc gõ tay mã vạch / mã thuốc -> thêm vào hóa đơn.
+     Chưa có hóa đơn thì tự tạo mã mới. Chặn thuốc HẾT HẠN và thuốc không đủ tồn.
+   - Tích điểm (quy định ở DTO/TichDiemDTO.cs):
+       + 10.000đ thực trả = 1 điểm; hạng theo số lần mua: Thành viên x1, Bạc (từ 5 lần) x1.2,
+         Vàng (từ 10 lần) x1.5; thưởng 20 điểm ở lần mua thứ 5, 10, 15...
+       + Đổi điểm: 1 điểm = 500đ, tối thiểu 20 điểm, giảm tối đa 50% hóa đơn.
+       + Tiền giảm do đổi điểm được chia vào ChiTietHDB.ThanhTien -> báo cáo vẫn đúng.
+   - Sau thanh toán: Xuất Excel (có dòng đổi điểm), Xuất PDF (máy in ảo "Microsoft Print to PDF"
+     của Windows, khổ A5), Xem trước & In.
+   - NV lập hóa đơn mặc định = người đăng nhập; chỉ quản lý được chọn NV khác.
+
+D. NHẬP HÀNG
+   - File Excel import có thêm 2 cột tùy chọn: MaVach, CongDung (nhiều công dụng cách nhau bằng ;).
+     Công dụng chưa có sẽ tự thêm mới. File cũ không có 2 cột này vẫn import được.
+   - MauPhieuNhap.xlsx đã có 2 cột mới. Lưu ý: nếu đã import HDN005/HDN006 rồi thì đổi mã phiếu.
+   - Mã NV phụ trách tự điền theo người đăng nhập (thủ kho không sửa được).
+
+E. BÁO CÁO / DASHBOARD
+   - Dashboard (quản lý): 5 thẻ số liệu + 4 biểu đồ (doanh thu & tiền nhập theo tháng, top 5 thuốc
+     bán chạy, doanh thu NV theo quý, 5 HĐ thấp nhất so với phần còn lại).
+   - Báo cáo Top 5 HĐ / Top 2 NV: nút "📊 Biểu đồ so sánh" (nhóm thấp nhất tô đỏ, có đường trung bình),
+     lưu được ảnh PNG.
+   - "Nhập thêm hàng" chuyển thẳng sang trang Nhập hàng; "Hủy thuốc hết hạn" ghi lại mã NV thực hiện.
+
+F. KHÁC
+   - Tra cứu thuốc: tiêu đề cột tiếng Việt; không cho thêm thuốc hết hạn vào hóa đơn.
+   - Sửa lỗi gõ sai tên bảng "ChiTietHĐB" trong HoaDonBanDAO.ThemChiTietHDB (hàm cũ).
+   - Biểu đồ dùng System.Windows.Forms.DataVisualization (có sẵn trong .NET Framework, đã thêm vào .csproj).
+   - Mật khẩu lưu dạng chữ thường (không mã hóa) để quản lý xem được theo yêu cầu.
+
+G. DANH SÁCH FILE
+   Mới (24): CSDL_QuanLyNhaThuoc.sql
+     BLL: DanhMucBLL, NhanVienBLL, TichDiemBLL
+     DAL: DanhMucDAO, NhanVienDAO, SqlHelper
+     DTO: DanhMucCauHinh, NhanVienDTO, PhienDangNhap, ThuocDTO, TichDiemDTO
+     GUI: BieuDoHelper, GiaoDien, InHoaDon, frmBieuDo, frmChonCongDung, frmDangNhap, frmDanhMuc,
+          frmDashboard, frmDoiMatKhau, frmQuanLyNhanVien, frmQuanLyThuoc, frmQuenMatKhau
+   Sửa (19): Program.cs, QuanLyNhaThuoc.csproj, MauPhieuNhap.xlsx
+     BLL: BaoCaoBLL, HoaDonBanBLL, HoaDonNhapBLL, PhieuNhapExcel, ThuocBLL
+     DAL: BaoCaoDAO, DongPhieuNhap, HoaDonBanDAO, HoaDonNhapDAO, ThuocDAO
+     DTO: HoaDonTam
+     GUI: frmBanHang, frmBaoCao, frmMain, frmNhapHang, frmThuoc
+   Xóa: CSDL_first_edition.sql
+   KHÔNG đổi: DAL/DBConnection.cs (giữ chuỗi kết nối của máy mình), frmThanhToan, XuatExcel, *.Designer.cs
+   Mọi chỗ sửa trong code đều có ghi chú "[10/11/2026]".

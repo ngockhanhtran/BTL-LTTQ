@@ -44,7 +44,8 @@ namespace QuanLyNhaThuoc.DAL
                     if (slTon < soLuong)
                         throw new Exception($"Số lượng tồn kho của thuốc {maThuoc} không đủ (Còn: {slTon})!");
 
-                    string sqlCT = "INSERT INTO ChiTietHĐB (MaHDB, MaThuoc, SoLuong, GiamGia, ThanhTien) VALUES (@MaHDB, @MaThuoc, @SoLuong, @GiamGia, @ThanhTien)";
+                    // [10/11/2026] sửa lỗi gõ sai tên bảng "ChiTietHĐB" (chữ Đ tiếng Việt) -> ChiTietHDB
+                    string sqlCT = "INSERT INTO ChiTietHDB (MaHDB, MaThuoc, SoLuong, GiamGia, ThanhTien) VALUES (@MaHDB, @MaThuoc, @SoLuong, @GiamGia, @ThanhTien)";
                     SqlCommand cmdCT = new SqlCommand(sqlCT, conn, transaction);
                     cmdCT.Parameters.AddWithValue("@MaHDB", maHDB);
                     cmdCT.Parameters.AddWithValue("@MaThuoc", maThuoc);
@@ -90,10 +91,35 @@ namespace QuanLyNhaThuoc.DAL
         }
 
         // Danh sách nhân viên cho ComboBox (cột HienThi = "MaNV - TenNV")
+        // [10/11/2026] Chỉ lấy NV đang làm việc và có quyền bán (quản lý / bán hàng), bỏ thủ kho.
         public DataTable GetDanhSachNhanVien()
         {
-            string sql = "SELECT MaNV, TenNV, RTRIM(MaNV) + ' - ' + TenNV AS HienThi FROM NhanVien ORDER BY MaNV";
+            string sql = @"SELECT MaNV, TenNV, RTRIM(MaNV) + ' - ' + TenNV AS HienThi
+                           FROM NhanVien
+                           WHERE NghiViec = 0 AND ISNULL(MaVaiTro, 'BH') <> 'TK'
+                           ORDER BY MaNV";
             return db.ExecuteQuery(sql);
+        }
+
+        // [10/11/2026] Thông tin khách + điểm tích lũy + số lần đã mua (null nếu khách chưa có)
+        public ThongTinKhach GetThongTinKhach(string maKhach)
+        {
+            DataTable dt = SqlHelper.Query(@"
+                SELECT k.MaKhach, k.TenKhach, k.DienThoai, k.DiemTichLuy,
+                       (SELECT COUNT(*) FROM HoaDonBan h WHERE h.MaKhach = k.MaKhach) AS SoLanMua
+                FROM KhachHang k
+                WHERE k.MaKhach = @MaKhach",
+                SqlHelper.PChuoi("@MaKhach", (maKhach ?? "").Trim()));
+            if (dt.Rows.Count == 0) return null;
+            DataRow r = dt.Rows[0];
+            return new ThongTinKhach
+            {
+                MaKhach = r["MaKhach"].ToString().Trim(),
+                TenKhach = r["TenKhach"].ToString(),
+                DienThoai = r["DienThoai"] == DBNull.Value ? "" : r["DienThoai"].ToString(),
+                DiemTichLuy = r["DiemTichLuy"] == DBNull.Value ? 0 : Convert.ToInt32(r["DiemTichLuy"]),
+                SoLanMua = Convert.ToInt32(r["SoLanMua"])
+            };
         }
 
         // Trả về tên khách hàng, hoặc null nếu không tồn tại
@@ -126,7 +152,12 @@ namespace QuanLyNhaThuoc.DAL
         // Lưu cả hóa đơn + toàn bộ chi tiết + trừ tồn kho trong MỘT transaction
         // Lỗi ở bất kỳ dòng nào thì không lưu gì cả
         // tenKhachMoi != null  =>  khách chưa có trong CSDL, thêm mới vào bảng KhachHang trước
-        public void LuuHoaDon(HoaDonTam hd, string maNV, string maKhach, string tenKhachMoi, DateTime ngayBan)
+        // [10/11/2026] Thêm tích điểm:
+        //   - Trừ hd.DiemSuDung và cộng diemCong vào KhachHang.DiemTichLuy (cùng transaction)
+        //   - Lưu DiemSuDung / TienGiamDiem / DiemCong vào HoaDonBan
+        //   - ChiTietHDB.ThanhTien lấy từ hd.PhanBoThanhTien() (đã trừ giảm giá % + đổi điểm)
+        //   Trả về số điểm còn lại của khách sau hóa đơn.
+        public int LuuHoaDon(HoaDonTam hd, string maNV, string maKhach, string tenKhachMoi, DateTime ngayBan, int diemCong)
         {
             using (SqlConnection conn = db.GetConnection())
             {
@@ -147,18 +178,37 @@ namespace QuanLyNhaThuoc.DAL
                             cmdKH.ExecuteNonQuery();
                         }
 
+                        // [10/11/2026] Kiểm tra lại điểm của khách (khóa dòng, tránh 2 máy cùng dùng điểm)
+                        if (hd.DiemSuDung > 0)
+                        {
+                            object oDiem = SqlHelper.Scalar(conn, tran,
+                                "SELECT DiemTichLuy FROM KhachHang WITH (UPDLOCK, ROWLOCK) WHERE MaKhach = @MaKhach",
+                                SqlHelper.PChuoi("@MaKhach", maKhach));
+                            int diemCo = oDiem == null ? 0 : Convert.ToInt32(oDiem);
+                            if (diemCo < hd.DiemSuDung)
+                                throw new Exception($"Khách hàng chỉ còn {diemCo} điểm, không đủ {hd.DiemSuDung} điểm để đổi!");
+                        }
+
                         SqlCommand cmdHD = new SqlCommand(
-                            "INSERT INTO HoaDonBan (MaHDB, NgayBan, MaNV, MaKhach, TongTien) VALUES (@MaHDB, @NgayBan, @MaNV, @MaKhach, @TongTien)",
+                            @"INSERT INTO HoaDonBan (MaHDB, NgayBan, MaNV, MaKhach, TongTien, DiemSuDung, TienGiamDiem, DiemCong)
+                              VALUES (@MaHDB, @NgayBan, @MaNV, @MaKhach, @TongTien, @DiemSuDung, @TienGiamDiem, @DiemCong)",
                             conn, tran);
                         cmdHD.Parameters.AddWithValue("@MaHDB", hd.MaHDB);
                         cmdHD.Parameters.AddWithValue("@NgayBan", ngayBan);
                         cmdHD.Parameters.AddWithValue("@MaNV", maNV);
                         cmdHD.Parameters.AddWithValue("@MaKhach", maKhach);
                         cmdHD.Parameters.AddWithValue("@TongTien", hd.TongThanhToan);
+                        cmdHD.Parameters.AddWithValue("@DiemSuDung", hd.DiemSuDung);
+                        cmdHD.Parameters.AddWithValue("@TienGiamDiem", hd.TienGiamDiem);
+                        cmdHD.Parameters.AddWithValue("@DiemCong", diemCong);
                         cmdHD.ExecuteNonQuery();
 
-                        foreach (DongHoaDon d in hd.Dong)
+                        // [10/11/2026] Thành tiền thực của từng dòng (tổng = đúng TongThanhToan)
+                        List<decimal> thanhTienDong = hd.PhanBoThanhTien();
+
+                        for (int i = 0; i < hd.Dong.Count; i++)
                         {
+                            DongHoaDon d = hd.Dong[i];
                             // Khóa dòng thuốc để tránh 2 máy cùng bán vượt tồn
                             SqlCommand cmdTon = new SqlCommand(
                                 "SELECT SLHienCo FROM Thuoc WITH (UPDLOCK, ROWLOCK) WHERE MaThuoc = @MaThuoc", conn, tran);
@@ -177,7 +227,7 @@ namespace QuanLyNhaThuoc.DAL
                             cmdCT.Parameters.AddWithValue("@MaThuoc", d.MaThuoc);
                             cmdCT.Parameters.AddWithValue("@SoLuong", d.SoLuong);
                             cmdCT.Parameters.AddWithValue("@GiamGia", hd.GiamGiaPhanTram);
-                            cmdCT.Parameters.AddWithValue("@ThanhTien", hd.ThanhTienSauGiam(d));
+                            cmdCT.Parameters.AddWithValue("@ThanhTien", thanhTienDong[i]);
                             cmdCT.ExecuteNonQuery();
 
                             SqlCommand cmdUp = new SqlCommand(
@@ -187,7 +237,17 @@ namespace QuanLyNhaThuoc.DAL
                             cmdUp.ExecuteNonQuery();
                         }
 
+                        // [10/11/2026] Cập nhật điểm tích lũy của khách
+                        SqlHelper.NonQuery(conn, tran,
+                            "UPDATE KhachHang SET DiemTichLuy = DiemTichLuy - @Dung + @Cong WHERE MaKhach = @MaKhach",
+                            SqlHelper.P("@Dung", hd.DiemSuDung), SqlHelper.P("@Cong", diemCong),
+                            SqlHelper.PChuoi("@MaKhach", maKhach));
+                        object oConLai = SqlHelper.Scalar(conn, tran,
+                            "SELECT DiemTichLuy FROM KhachHang WHERE MaKhach = @MaKhach",
+                            SqlHelper.PChuoi("@MaKhach", maKhach));
+
                         tran.Commit();
+                        return oConLai == null ? 0 : Convert.ToInt32(oConLai);
                     }
                     catch
                     {

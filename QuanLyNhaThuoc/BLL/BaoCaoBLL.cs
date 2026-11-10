@@ -86,6 +86,40 @@ namespace QuanLyNhaThuoc.BLL
             return baoCaoDAO.HuyThuocHetHan(maNV, lyDo);
         }
 
+        // ================== [10/11/2026] DASHBOARD / BIỂU ĐỒ ==================
+
+        public DataTable DashboardTongQuan()
+        {
+            return baoCaoDAO.DashboardTongQuan(NGUONG_SAP_HET_HANG, SO_NGAY_SAP_HET_HAN);
+        }
+
+        public DataTable DoanhThuTheoThang(int nam)
+        {
+            KiemTraNam(nam);
+            return baoCaoDAO.DoanhThuTheoThang(nam);
+        }
+
+        public DataTable TopThuocBanChay(int nam, int soLuong = 5)
+        {
+            KiemTraNam(nam);
+            if (soLuong <= 0) soLuong = 5;
+            return baoCaoDAO.TopThuocBanChay(nam, soLuong);
+        }
+
+        public DataTable DoanhThuNhanVienTheoQuy(int quy, int nam, bool chiTinhNVCoBan = true)
+        {
+            if (quy < 1 || quy > 4)
+                throw new ArgumentException("Quý phải nằm trong khoảng 1 - 4.");
+            KiemTraNam(nam);
+            return baoCaoDAO.DoanhThuNhanVienTheoQuy(quy, nam, chiTinhNVCoBan);
+        }
+
+        public DataTable HoaDonBanTheoNam(int nam)
+        {
+            KiemTraNam(nam);
+            return baoCaoDAO.HoaDonBanTheoNam(nam);
+        }
+
         // Đếm số dòng có cờ = 1 (các cột LaHetHan, LaCanHan, LaHetHang, LaGanHetHang)
         public static int DemCo(DataTable dt, string cot)
         {

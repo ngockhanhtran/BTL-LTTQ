@@ -45,6 +45,7 @@ namespace QuanLyNhaThuoc.GUI
         private DataGridView dgvBaoCao;
         private Label lblCanhBao, lblTieuDe, lblTongKet;
         private Button btnXuatExcel, btnHuyHetHan, btnNhapThem;
+        private Button btnBieuDo;   // [10/11/2026] biểu đồ so sánh cho báo cáo Top 5 HĐ / Top 2 NV
         private readonly Dictionary<LoaiBaoCao, Button> nutBaoCao = new Dictionary<LoaiBaoCao, Button>();
 
         // Bộ lọc: mỗi nhóm = nhãn + control, ẩn/hiện theo báo cáo đang chọn
@@ -196,6 +197,8 @@ namespace QuanLyNhaThuoc.GUI
             btnXuatExcel = TaoNutLoc(pnlLoc, "Xuất Excel", 120, MAU_XANH_LA, BtnXuatExcel_Click);
             btnHuyHetHan = TaoNutLoc(pnlLoc, "Hủy thuốc hết hạn", 170, MAU_HUY, BtnHuyHetHan_Click);
             btnNhapThem = TaoNutLoc(pnlLoc, "Nhập thêm hàng", 150, MAU_NUT, BtnNhapThem_Click);
+            // [10/11/2026] so sánh nhóm "Top" với phần còn lại bằng biểu đồ
+            btnBieuDo = TaoNutLoc(pnlLoc, "📊 Biểu đồ so sánh", 165, Color.FromArgb(111, 66, 193), BtnBieuDo_Click);
 
             // Lưới dữ liệu
             dgvBaoCao = new DataGridView()
@@ -361,6 +364,7 @@ namespace QuanLyNhaThuoc.GUI
             btnXuatExcel.Visible = !laTrangCanhBao;
             btnHuyHetHan.Visible = laTrangCanhBao;
             btnNhapThem.Visible = laTrangCanhBao;
+            btnBieuDo.Visible = loai == LoaiBaoCao.Top5HDBan || loai == LoaiBaoCao.Top2NV;   // [10/11/2026]
 
             switch (loai)
             {
@@ -565,8 +569,8 @@ namespace QuanLyNhaThuoc.GUI
                         MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
                     return;
 
-                // TODO: truyền mã NV đang đăng nhập nếu project có lưu (vd: bcBLL.HuyThuocHetHan(Session.MaNV))
-                DataTable kq = bcBLL.HuyThuocHetHan();
+                // [10/11/2026] ghi nhận người hủy = nhân viên đang đăng nhập
+                DataTable kq = bcBLL.HuyThuocHetHan(QuanLyNhaThuoc.DTO.PhienDangNhap.MaNV);
                 DataRow k = kq.Rows[0];
                 MessageBox.Show(string.Format("Đã hủy {0} thuốc, tổng số lượng {1}, giá trị {2} đ.",
                         k["SoThuocHuy"], Convert.ToInt32(k["TongSLHuy"]).ToString("N0", VN),
@@ -684,6 +688,26 @@ namespace QuanLyNhaThuoc.GUI
             {
                 MessageBox.Show("Không mở được trang Nhập hàng: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return true; // đã báo lỗi rồi, không báo thêm
+            }
+        }
+
+        // ================================================================
+        // [10/11/2026] NÚT: BIỂU ĐỒ SO SÁNH (Top 5 HĐ bán ít / Top 2 NV bán ít)
+        // ================================================================
+        private void BtnBieuDo_Click(object sender, EventArgs e)
+        {
+            int nam = (int)nudNam.Value;
+            try
+            {
+                if (baoCaoHienTai == LoaiBaoCao.Top5HDBan)
+                    frmBieuDo.MoBieuDoHoaDon(this.TopLevelControl ?? this, nam);
+                else if (baoCaoHienTai == LoaiBaoCao.Top2NV)
+                    frmBieuDo.MoBieuDoNhanVien(this.TopLevelControl ?? this, cboQuy.SelectedIndex + 1, nam, chkChiNVCoBan.Checked);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Lỗi vẽ biểu đồ: " + ex.Message + "\n\nHãy chạy lại file CSDL_QuanLyNhaThuoc.sql để tạo các proc sp_Dashboard_*.",
+                    "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 

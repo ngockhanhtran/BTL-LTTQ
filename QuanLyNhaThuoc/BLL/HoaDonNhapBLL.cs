@@ -9,6 +9,7 @@ namespace QuanLyNhaThuoc.BLL
     public class HoaDonNhapBLL
     {
         private HoaDonNhapDAO hdnDAO = new HoaDonNhapDAO();
+        private ThuocDAO thuocDAO = new ThuocDAO();     // [10/11/2026] kiểm tra mã vạch / công dụng khi import
 
         // ===================== CÁC HÀM CŨ - GIỮ NGUYÊN =====================
         public bool ThemHoaDonNhap(string maHDN, DateTime ngayNhap, string maNV, string maNCC, decimal tongTien)
@@ -175,9 +176,33 @@ namespace QuanLyNhaThuoc.BLL
                 thuocMoi.Add(d.MaThuoc);
             }
 
+            // 3. [10/11/2026] Mã vạch: không trùng giữa các thuốc trong file và với thuốc khác trong CSDL
+            foreach (var nhom in kq.DanhSach.Where(d => !string.IsNullOrWhiteSpace(d.MaVach) && d.MaThuoc != "")
+                                            .GroupBy(d => d.MaVach.Trim(), StringComparer.OrdinalIgnoreCase))
+            {
+                List<string> dsThuoc = nhom.Select(d => d.MaThuoc).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (dsThuoc.Count > 1)
+                {
+                    kq.Loi.Add("Mã vạch " + nhom.Key + " bị dùng cho nhiều thuốc khác nhau (" + string.Join(", ", dsThuoc) +
+                               ") ở các dòng " + string.Join(", ", nhom.Select(x => x.DongExcel)) + ".");
+                    continue;
+                }
+                string maDangDung = thuocDAO.LayMaThuocTheoMaVach(nhom.Key);
+                if (maDangDung != null && !string.Equals(maDangDung, dsThuoc[0], StringComparison.OrdinalIgnoreCase))
+                    kq.Loi.Add("Dòng " + nhom.First().DongExcel + ": mã vạch " + nhom.Key + " đã được dùng cho thuốc " + maDangDung + " trong CSDL.");
+            }
+
+            // 4. [10/11/2026] Đếm công dụng mới (chưa có trong CSDL, sẽ tự thêm khi import)
+            var congDungMoi = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string cd in kq.DanhSach.SelectMany(d => d.DanhSachCongDung).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (thuocDAO.TimMaCongDung(cd) == null) congDungMoi.Add(cd);
+            }
+
             kq.SoPhieu = kq.DanhSach.Select(d => d.MaHDN.ToUpperInvariant()).Distinct().Count();
             kq.SoThuocMoi = thuocMoi.Count;
             kq.SoNCCMoi = nccMoi.Count;
+            kq.SoCongDungMoi = congDungMoi.Count;
             kq.TongTien = kq.DanhSach.Sum(d => d.ThanhTien);
             kq.XemTruoc = TaoBangXemTruoc(kq.DanhSach, tenThuocCSDL);
             return kq;
@@ -204,6 +229,8 @@ namespace QuanLyNhaThuoc.BLL
             dt.Columns.Add("Đơn Giá", typeof(decimal));
             dt.Columns.Add("Khuyến Mãi", typeof(decimal));
             dt.Columns.Add("Thành Tiền", typeof(decimal));
+            dt.Columns.Add("Mã Vạch");      // [10/11/2026]
+            dt.Columns.Add("Công Dụng");    // [10/11/2026]
             dt.Columns.Add("Trạng Thái");
 
             foreach (DongPhieuNhap d in ds)
@@ -216,7 +243,8 @@ namespace QuanLyNhaThuoc.BLL
                     trangThai = tenCSDL != null ? "Đã có - cộng tồn kho" : "THUỐC MỚI - sẽ thêm vào CSDL";
                 }
                 dt.Rows.Add(d.DongExcel, d.MaHDN, d.MaNV, d.MaNCC, d.MaThuoc, tenCSDL ?? d.TenThuoc,
-                            d.SLNhap, d.DonGia, d.KhuyenMai, d.ThanhTien, trangThai);
+                            d.SLNhap, d.DonGia, d.KhuyenMai, d.ThanhTien,
+                            d.MaVach, string.Join("; ", d.DanhSachCongDung), trangThai);
             }
             return dt;
         }
@@ -236,6 +264,7 @@ namespace QuanLyNhaThuoc.BLL
         public int SoPhieu { get; set; }
         public int SoThuocMoi { get; set; }
         public int SoNCCMoi { get; set; }
+        public int SoCongDungMoi { get; set; }      // [10/11/2026]
         public decimal TongTien { get; set; }
     }
 }

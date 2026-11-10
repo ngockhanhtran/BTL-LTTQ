@@ -29,6 +29,17 @@ namespace QuanLyNhaThuoc.GUI
 
             this.Text = "Quản lý Nhập Hàng & Kho";
             InitializeComponentCustom();
+
+            // [10/11/2026] Mã NV phụ trách = người đang đăng nhập. Thủ kho không sửa được, quản lý được chọn người khác.
+            if (QuanLyNhaThuoc.DTO.PhienDangNhap.DaDangNhap)
+            {
+                txtMaNV.Text = QuanLyNhaThuoc.DTO.PhienDangNhap.MaNV;
+                if (QuanLyNhaThuoc.DTO.PhienDangNhap.LaThuKho)
+                {
+                    txtMaNV.ReadOnly = true;
+                    txtMaNV.BackColor = Color.FromArgb(240, 242, 245);
+                }
+            }
         }
 
         private void InitializeComponentCustom()
@@ -70,7 +81,7 @@ namespace QuanLyNhaThuoc.GUI
             Label lblExcel = new Label() { Text = "Nhập Hàng Từ File Excel", Font = new Font("Segoe UI", 11, FontStyle.Bold), Left = 15, Top = yEx, AutoSize = true };
             Label lblExcelMoTa = new Label()
             {
-                Text = "Nhập nhiều phiếu cùng lúc, cho phép cả thuốc mới chưa có trong CSDL (tự thêm thuốc và tăng tồn kho).",
+                Text = "Nhập nhiều phiếu, cho phép thuốc mới (tự thêm thuốc, mã vạch, công dụng) và tăng tồn kho.",
                 Left = 15,
                 Top = yEx + 28,
                 Width = 330,
@@ -253,6 +264,7 @@ namespace QuanLyNhaThuoc.GUI
                 string xacNhan = "Đọc được " + kq.DanhSach.Count + " dòng thuốc thuộc " + kq.SoPhieu + " phiếu nhập.\n" +
                                  "- Thuốc mới sẽ thêm vào CSDL: " + kq.SoThuocMoi + "\n" +
                                  "- Nhà cung cấp mới: " + kq.SoNCCMoi + "\n" +
+                                 "- Công dụng mới: " + kq.SoCongDungMoi + "\n" +                     // [10/11/2026]
                                  "- Tổng tiền: " + kq.TongTien.ToString("N0") + " đ\n\n" +
                                  "Xác nhận nhập kho?";
                 if (MessageBox.Show(xacNhan, "Xác nhận import", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
@@ -268,7 +280,8 @@ namespace QuanLyNhaThuoc.GUI
                                 "- " + tk.SoPhieu + " phiếu nhập\n" +
                                 "- " + kq.DanhSach.Count + " dòng thuốc, đã tăng tồn kho\n" +
                                 "- " + tk.SoThuocMoi + " thuốc mới được thêm\n" +
-                                "- " + tk.SoNCCMoi + " nhà cung cấp mới",
+                                "- " + tk.SoNCCMoi + " nhà cung cấp mới\n" +
+                                "- " + tk.SoCongDungMoi + " công dụng mới",                          // [10/11/2026]
                                 "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                 dgvKetQua.DataSource = hdnBLL.TimKiemHoaDonNhap("");

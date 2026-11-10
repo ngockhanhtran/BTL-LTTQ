@@ -228,6 +228,7 @@ namespace QuanLyNhaThuoc.DAL
         //  - Nhiều phiếu trong 1 file (gom theo MaHDN)
         //  - NCC chưa có + có TenNCC  -> tự thêm NCC mới
         //  - Thuốc chưa có + có TenThuoc -> tự thêm thuốc mới, rồi cộng tồn kho
+        //  - [10/11/2026] Cột MaVach -> gán mã vạch; cột CongDung -> gán công dụng (tự thêm công dụng mới)
         // =====================================================================
         public ThongKeImport ImportPhieuNhap(List<DongPhieuNhap> dsDong)
         {
@@ -271,15 +272,32 @@ namespace QuanLyNhaThuoc.DAL
                                     throw new InvalidOperationException("Dòng " + d.DongExcel + ": thuốc mới " + d.MaThuoc + " thiếu TenThuoc.");
 
                                 // Thêm thuốc mới với tồn kho = 0, bước sau sẽ cộng SLNhap và cập nhật giá
+                                // [10/11/2026] thêm cột MaVach
                                 ThucThi(conn, tx,
-                                    @"INSERT INTO Thuoc (MaThuoc, TenThuoc, MaDVT, MaDangDC, ThanhPhan, DonGiaNhap, GiaBan, SLHienCo, NgaySX, MaNuocSX, HanSD, ChongChiDinh)
-                                      VALUES (@MaThuoc, @TenThuoc, @MaDVT, @MaDangDC, @ThanhPhan, 0, 0, 0, @NgaySX, @MaNuocSX, @HanSD, @ChongChiDinh)",
+                                    @"INSERT INTO Thuoc (MaThuoc, TenThuoc, MaVach, MaDVT, MaDangDC, ThanhPhan, DonGiaNhap, GiaBan, SLHienCo, NgaySX, MaNuocSX, HanSD, ChongChiDinh)
+                                      VALUES (@MaThuoc, @TenThuoc, @MaVach, @MaDVT, @MaDangDC, @ThanhPhan, 0, 0, 0, @NgaySX, @MaNuocSX, @HanSD, @ChongChiDinh)",
                                     ThamSo("@MaThuoc", d.MaThuoc), ThamSo("@TenThuoc", d.TenThuoc),
+                                    ThamSo("@MaVach", d.MaVach),
                                     ThamSo("@MaDVT", d.MaDVT), ThamSo("@MaDangDC", d.MaDangDC),
                                     ThamSo("@ThanhPhan", d.ThanhPhan), ThamSo("@NgaySX", d.NgaySX),
                                     ThamSo("@MaNuocSX", d.MaNuocSX), ThamSo("@HanSD", d.HanSD),
                                     ThamSo("@ChongChiDinh", d.ChongChiDinh));
                                 tk.SoThuocMoi++;
+                            }
+                            else if (!string.IsNullOrWhiteSpace(d.MaVach))
+                            {
+                                // [10/11/2026] thuốc đã có: gán / cập nhật mã vạch theo file
+                                ThucThi(conn, tx, "UPDATE Thuoc SET MaVach = @MaVach WHERE MaThuoc = @MaThuoc",
+                                    ThamSo("@MaVach", d.MaVach), ThamSo("@MaThuoc", d.MaThuoc));
+                            }
+
+                            // [10/11/2026] gán công dụng (tự thêm công dụng chưa có trong CSDL)
+                            foreach (string tenCD in d.DanhSachCongDung)
+                            {
+                                bool taoMoi;
+                                string maCD = ThuocDAO.TimHoacTaoCongDung(conn, tx, tenCD, out taoMoi);
+                                if (taoMoi) tk.SoCongDungMoi++;
+                                if (maCD != null) ThuocDAO.ThemCongDungChoThuoc(conn, tx, d.MaThuoc, maCD);
                             }
 
                             ThemChiTietVaCapNhatKho(conn, tx, d.MaHDN, d.MaThuoc, d.SLNhap, d.DonGia, d.KhuyenMai);

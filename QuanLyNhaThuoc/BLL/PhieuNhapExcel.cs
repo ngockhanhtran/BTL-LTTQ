@@ -41,6 +41,9 @@ namespace QuanLyNhaThuoc.BLL
             new CotExcel("NgaySX",       false, "Thuốc mới: ngày sản xuất (dd/MM/yyyy)."),
             new CotExcel("HanSD",        false, "Thuốc mới: hạn sử dụng (dd/MM/yyyy), phải sau NgaySX."),
             new CotExcel("ChongChiDinh", false, "Thuốc mới: chống chỉ định."),
+            // [10/11/2026] 2 cột tùy chọn mới (file cũ không có 2 cột này vẫn import được)
+            new CotExcel("MaVach",       false, "Mã vạch in trên hộp thuốc (để quét khi bán). Điền cho thuốc mới hoặc thuốc đã có chưa có mã vạch. Không trùng thuốc khác."),
+            new CotExcel("CongDung",     false, "Tên công dụng, nhiều công dụng cách nhau bằng dấu ; (vd: Giảm đau; Hạ sốt). Công dụng chưa có trong CSDL sẽ tự thêm mới."),
             new CotExcel("SLNhap",       true,  "Số lượng nhập, số nguyên > 0 -> được cộng vào tồn kho."),
             new CotExcel("DonGia",       true,  "Đơn giá nhập. Giá bán tự cập nhật = 110% đơn giá nhập."),
             new CotExcel("KhuyenMai",    false, "Số tiền được giảm cho dòng này (VNĐ). Thành tiền = SLNhap x DonGia - KhuyenMai."),
@@ -100,7 +103,9 @@ namespace QuanLyNhaThuoc.BLL
                         MaDangDC = Chuoi(row, viTriCot, "MaDangDC"),
                         ThanhPhan = Chuoi(row, viTriCot, "ThanhPhan"),
                         MaNuocSX = Chuoi(row, viTriCot, "MaNuocSX"),
-                        ChongChiDinh = Chuoi(row, viTriCot, "ChongChiDinh")
+                        ChongChiDinh = Chuoi(row, viTriCot, "ChongChiDinh"),
+                        MaVach = Chuoi(row, viTriCot, "MaVach"),        // [10/11/2026]
+                        CongDung = Chuoi(row, viTriCot, "CongDung")     // [10/11/2026]
                     };
 
                     IXLCell oSL = O(row, viTriCot, "SLNhap");
@@ -128,6 +133,9 @@ namespace QuanLyNhaThuoc.BLL
                     DoDai(d.TenThuoc, "TenThuoc", 100, tt, loi);
                     DoDai(d.ThanhPhan, "ThanhPhan", 255, tt, loi);
                     DoDai(d.ChongChiDinh, "ChongChiDinh", 255, tt, loi);
+                    DoDai(d.MaVach, "MaVach", 50, tt, loi);                         // [10/11/2026]
+                    foreach (string cd in d.DanhSachCongDung)                       // [10/11/2026]
+                        DoDai(cd, "CongDung \"" + cd + "\"", 100, tt, loi);
 
                     decimal so;
                     if (!DocSo(oSL, out so) || so <= 0 || so != decimal.Truncate(so) || so > int.MaxValue)
@@ -182,25 +190,27 @@ namespace QuanLyNhaThuoc.BLL
 
                     string ten = DS_COT[i].Ten;
                     IXLRange vungDuLieu = ws.Range(2, cot, 500, cot);
-                    if (ten.StartsWith("Ma")) vungDuLieu.Style.NumberFormat.Format = "@";            // mã: dạng text
+                    if (ten.StartsWith("Ma")) vungDuLieu.Style.NumberFormat.Format = "@";            // mã (cả MaVach): dạng text
                     if (ten == "NgayNhap" || ten == "NgaySX" || ten == "HanSD") vungDuLieu.Style.DateFormat.Format = "dd/MM/yyyy";
                     if (ten == "SLNhap" || ten == "DonGia" || ten == "KhuyenMai") vungDuLieu.Style.NumberFormat.Format = "#,##0";
                 }
 
                 // Dòng mẫu 1: thuốc ĐÃ CÓ trong CSDL -> chỉ cần mã + SL + giá
                 Ghi(ws, 2, "MaHDN", "HDN001"); Ghi(ws, 2, "NgayNhap", DateTime.Today);
-                Ghi(ws, 2, "MaNV", "NV01"); Ghi(ws, 2, "MaNCC", "NCC01");
+                Ghi(ws, 2, "MaNV", "TK001"); Ghi(ws, 2, "MaNCC", "NCC01");   // [10/11/2026] TK001 (trước: NV01)
                 Ghi(ws, 2, "MaThuoc", "TH001");
                 Ghi(ws, 2, "SLNhap", 50); Ghi(ws, 2, "DonGia", 15000); Ghi(ws, 2, "KhuyenMai", 0);
 
                 // Dòng mẫu 2: thuốc MỚI -> điền thêm thông tin thuốc
                 Ghi(ws, 3, "MaHDN", "HDN001"); Ghi(ws, 3, "NgayNhap", DateTime.Today);
-                Ghi(ws, 3, "MaNV", "NV01"); Ghi(ws, 3, "MaNCC", "NCC01");
+                Ghi(ws, 3, "MaNV", "TK001"); Ghi(ws, 3, "MaNCC", "NCC01");   // [10/11/2026] mã NV mẫu = thủ kho TK001 (trước: NV01)
                 Ghi(ws, 3, "MaThuoc", "TH002"); Ghi(ws, 3, "TenThuoc", "Efferalgan 500mg");
                 Ghi(ws, 3, "MaDVT", "DVT01"); Ghi(ws, 3, "MaDangDC", "DC01");
                 Ghi(ws, 3, "ThanhPhan", "Paracetamol 500mg"); Ghi(ws, 3, "MaNuocSX", "NSX01");
                 Ghi(ws, 3, "NgaySX", new DateTime(2026, 6, 1)); Ghi(ws, 3, "HanSD", new DateTime(2029, 6, 1));
                 Ghi(ws, 3, "ChongChiDinh", "Suy gan nặng");
+                Ghi(ws, 3, "MaVach", "8935049500018");                       // [10/11/2026]
+                Ghi(ws, 3, "CongDung", "Giảm đau; Hạ sốt");                  // [10/11/2026]
                 Ghi(ws, 3, "SLNhap", 30); Ghi(ws, 3, "DonGia", 45000); Ghi(ws, 3, "KhuyenMai", 50000);
 
                 ws.SheetView.FreezeRows(1);
@@ -230,6 +240,8 @@ namespace QuanLyNhaThuoc.BLL
                     "- Mỗi dòng là 1 thuốc. Nhiều dòng cùng MaHDN = 1 phiếu nhập (1 phiếu chỉ có 1 MaNV và 1 MaNCC). Trong 1 phiếu không lặp lại MaThuoc.",
                     "- Thuốc ĐÃ CÓ trong CSDL: chỉ cần MaThuoc, SLNhap, DonGia -> tồn kho được cộng thêm, giá nhập và giá bán (110%) được cập nhật.",
                     "- Thuốc MỚI: điền thêm TenThuoc (bắt buộc) và các cột thông tin thuốc -> hệ thống tự thêm thuốc vào CSDL rồi cộng tồn kho.",
+                    "- Cột CongDung: nhiều công dụng cách nhau bằng dấu ; -> được gán cho thuốc (cả thuốc đã có), công dụng chưa có sẽ tự thêm mới, nhờ vậy tìm được thuốc theo công dụng.",
+                    "- Cột MaVach: mã vạch trên hộp thuốc để quét khi bán; nhập dạng chữ (Text) để Excel không đổi thành số mũ.",
                     "- Cột tiêu đề màu vàng là bắt buộc. Không đổi tên dòng tiêu đề (thứ tự cột có thể thay đổi).",
                     "- Toàn bộ file được nhập trong 1 giao dịch: chỉ cần 1 dòng lỗi thì không dòng nào được ghi vào CSDL.",
                     "- Hai dòng có sẵn trong sheet PhieuNhap chỉ là ví dụ, hãy xóa/sửa trước khi import."

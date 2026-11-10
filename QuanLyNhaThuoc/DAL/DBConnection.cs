@@ -10,7 +10,7 @@ namespace QuanLyNhaThuoc.DAL
 {
     public class DBConnection
     {
-        private string connString = @"Data Source=.\SQLEXPRESS;Initial Catalog=QuanLyNhaThuoc;Integrated Security=True";        // Hàm mở kế nối
+        private string connString = @"Data Source=.;Initial Catalog=QuanLyNhaThuoc;Integrated Security=True";        // Hàm mở kế nối
         public SqlConnection GetConnection()
         {
             return new SqlConnection(connString);
