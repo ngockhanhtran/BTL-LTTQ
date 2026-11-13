@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    [11/11/2026 lần 7] Unit test (MSTest) cho các hàm nghiệp vụ KHÔNG cần CSDL:
+    tích điểm, phân bổ giảm giá, băm mật khẩu, tìm không dấu, mã vạch EAN-13, dự báo nhập hàng,
+    tương tác thuốc, đo hiệu năng, dịch lỗi ràng buộc CHECK.
+    Chạy: Visual Studio > Test > Test Explorer > Run All  (hoặc: dotnet test / vstest.console).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <LangVersion>7.3</LangVersion>
+    <RootNamespace>QuanLyNhaThuoc.Tests</RootNamespace>
+    <AssemblyName>QuanLyNhaThuoc.Tests</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="MSTest.TestAdapter" Version="3.1.1" />
+    <PackageReference Include="MSTest.TestFramework" Version="3.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Data" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\QuanLyNhaThuoc\QuanLyNhaThuoc.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,42 @@
+# [11/11/2026 lần 7] GitHub Actions: mỗi lần push / tạo Pull Request, GitHub tự
+#   1. tải mã nguồn, 2. tải gói NuGet, 3. build ứng dụng, 4. build + chạy unit test (MSTest).
+# Kết quả xem ở tab "Actions" trên GitHub: dấu ✓ xanh = đạt, ✗ đỏ = lỗi (bấm vào để xem dòng lỗi).
+name: Build & Test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:        # cho phép bấm chạy tay ở tab Actions
+
+jobs:
+  build-test:
+    runs-on: windows-latest     # WinForms .NET Framework 4.7.2 chỉ build được trên Windows
+
+    steps:
+      - name: Lấy mã nguồn
+        uses: actions/checkout@v4
+
+      - name: Cài MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Cài NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Tải gói NuGet của ứng dụng (packages.config)
+        run: nuget restore QuanLyNhaThuoc\packages.config -PackagesDirectory QuanLyNhaThuoc\packages
+
+      - name: Build ứng dụng
+        run: msbuild QuanLyNhaThuoc\QuanLyNhaThuoc.csproj /p:Configuration=Release /m /v:minimal
+
+      - name: Build project unit test
+        run: msbuild QuanLyNhaThuoc.Tests\QuanLyNhaThuoc.Tests.csproj "/t:Restore;Build" /p:Configuration=Release /v:minimal
+
+      - name: Chạy unit test
+        run: dotnet test QuanLyNhaThuoc.Tests\QuanLyNhaThuoc.Tests.csproj --no-build -c Release --logger "trx;LogFileName=KetQuaTest.trx" --logger "console;verbosity=normal"
+
+      - name: Lưu kết quả test
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ket-qua-test
+          path: QuanLyNhaThuoc.Tests\TestResults\*.trx

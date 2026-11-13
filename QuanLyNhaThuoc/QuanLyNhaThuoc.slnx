@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="QuanLyNhaThuoc.csproj" Id="9a67de27-7f49-44eb-9cc9-e76c775820fd" />
+  <Project Path="../QuanLyNhaThuoc.Tests/QuanLyNhaThuoc.Tests.csproj" />
+</Solution>
